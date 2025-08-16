@@ -208,10 +208,24 @@ CREATE POLICY "Household admins can update households"
   ON households FOR UPDATE TO authenticated
   USING (id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid() AND role = 'admin'));
 
+-- Security function to check household membership
+CREATE OR REPLACE FUNCTION is_household_member(household_uuid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM household_members 
+    WHERE user_id = auth.uid() 
+    AND household_id = household_uuid
+  );
+$$;
+
 -- RLS Policies for household_members
 CREATE POLICY "Users can view household members for their households"
   ON household_members FOR SELECT TO authenticated
-  USING (household_id IN (SELECT household_id FROM household_members WHERE user_id = auth.uid()));
+  USING (is_household_member(household_id));
 
 CREATE POLICY "Users can join households"
   ON household_members FOR INSERT TO authenticated

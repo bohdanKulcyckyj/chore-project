@@ -4,11 +4,7 @@ import { useAuth } from './useAuth';
 
 type Household = Tables<'households'>;
 type HouseholdMember = Tables<'household_members'> & {
-  user_profile?: {
-    id: string;
-    email: string;
-    display_name: string;
-  };
+  user_profile?: Tables<'user_profiles'>;
 };
 
 interface HouseholdContextType {
@@ -82,20 +78,30 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     if (!currentHousehold) return;
 
     try {
-      const { data, error } = await supabase
+      // Fetch household members
+      const { data: membersData, error: membersError } = await supabase
         .from('household_members')
-        .select(`
-          *,
-          user_profile:user_id (
-            id,
-            email,
-            display_name:raw_user_meta_data->>display_name
-          )
-        `)
+        .select('*')
         .eq('household_id', currentHousehold.id);
 
-      if (error) throw error;
-      setMembers(data as HouseholdMember[]);
+      if (membersError) throw membersError;
+
+      // Fetch user profiles for these members
+      const userIds = membersData?.map(m => m.user_id) || [];
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine the data
+      const membersWithProfiles = membersData?.map(member => ({
+        ...member,
+        user_profile: profilesData?.find(profile => profile.id === member.user_id)
+      })) || [];
+
+      setMembers(membersWithProfiles as HouseholdMember[]);
     } catch (error) {
       console.error('Error fetching members:', error);
     }
@@ -123,6 +129,14 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
   }, [currentHousehold]);
 
   const createHousehold = async (name: string, description = '') => {
+    console.log('User object:', user);
+    console.log('User ID:', user?.id);
+    
+    // Check current session
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Current session:', session);
+    console.log('Session user ID:', session?.user?.id);
+    
     if (!user) return { error: { message: 'Not authenticated' } };
 
     try {
@@ -132,10 +146,11 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
         .insert({
           name,
           description,
-          created_by: user.id,
         })
         .select()
         .single();
+        
+      console.log('Household creation result:', { household, error: householdError });
 
       if (householdError) throw householdError;
 

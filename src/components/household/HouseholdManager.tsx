@@ -60,7 +60,7 @@ const HouseholdManager: React.FC = () => {
   };
 
   // If user has households but none selected, show main view
-  if (households.length === 0) {
+  if (households.length === 0 && view === 'main') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50 flex items-center justify-center p-4">
         <motion.div 
