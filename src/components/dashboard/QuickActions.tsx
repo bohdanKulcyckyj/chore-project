@@ -39,13 +39,13 @@ const QuickActions: React.FC = () => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ delay: 0.5 }}
-      className="bg-white rounded-2xl p-6 shadow-sm"
+      className="bg-white rounded-2xl p-4 md:p-6 shadow-sm"
     >
-      <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <Plus className="w-6 h-6 text-blue-500" />
+      <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-3 md:mb-4 flex items-center gap-2">
+        <Plus className="w-5 h-5 md:w-6 md:h-6 text-blue-500" />
         Quick Actions
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {actions.map((action, index) => (
           <motion.button
             key={action.title}
@@ -55,7 +55,7 @@ const QuickActions: React.FC = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={action.onClick}
-            className="p-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-all text-left group"
+            className="p-3 md:p-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-all text-left group min-h-[100px] md:min-h-[120px]"
           >
             <div className={`inline-flex items-center justify-center w-10 h-10 bg-gradient-to-r ${action.color} rounded-lg text-white mb-3 group-hover:scale-110 transition-transform`}>
               {action.icon}

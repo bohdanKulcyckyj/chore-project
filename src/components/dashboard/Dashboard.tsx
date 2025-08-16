@@ -105,10 +105,10 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-4 md:mb-6"></div>
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="h-32 bg-gray-200 rounded-2xl"></div>
             ))}
@@ -119,7 +119,7 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Welcome Header */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -127,10 +127,10 @@ const Dashboard: React.FC = () => {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Welcome back! 👋
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm md:text-base text-gray-600 mt-1">
             Ready to tackle some tasks in {currentHousehold?.name}?
           </p>
         </div>
@@ -146,7 +146,7 @@ const Dashboard: React.FC = () => {
       </motion.div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         <StatsCard
           title="Total Points"
           value={stats.personalStats?.total_points || 0}
@@ -181,7 +181,7 @@ const Dashboard: React.FC = () => {
       <QuickActions />
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Today's Tasks */}
         <div className="lg:col-span-2">
           <TodaysTasks 

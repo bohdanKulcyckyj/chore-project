@@ -8,7 +8,8 @@ import {
   Users, 
   Settings,
   LogOut,
-  Star
+  Star,
+  X
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
@@ -16,9 +17,18 @@ import { useHousehold } from '../../hooks/useHousehold';
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  isMobile: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  activeTab, 
+  onTabChange, 
+  isOpen, 
+  onClose, 
+  isMobile 
+}) => {
   const { signOut } = useAuth();
   const { currentHousehold } = useHousehold();
 
@@ -41,8 +51,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   return (
     <motion.div
       initial={{ x: -280 }}
-      animate={{ x: 0 }}
-      className="fixed left-0 top-0 h-full w-70 bg-white shadow-lg z-40 flex flex-col"
+      animate={{ x: isOpen ? 0 : -280 }}
+      transition={{ duration: 0.3, ease: 'easeInOut' }}
+      className={`fixed left-0 top-0 h-full w-70 bg-white shadow-xl z-40 flex flex-col ${
+        isMobile ? 'md:hidden' : 'hidden md:flex'
+      }`}
     >
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
@@ -50,12 +63,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
           <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-emerald-500 rounded-xl flex items-center justify-center">
             <Home className="w-6 h-6 text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="font-bold text-gray-900">ChoreQuest</h2>
             <p className="text-sm text-gray-500 truncate">
               {currentHousehold?.name || 'No household'}
             </p>
           </div>
+          {isMobile && (
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          )}
         </div>
       </div>
 
