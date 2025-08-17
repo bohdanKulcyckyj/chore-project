@@ -30,7 +30,7 @@ interface FormData {
   name: string;
   description: string;
   category_id: string;
-  assigned_to: string;
+  assigned_to: string; // Empty string means unassigned
   due_date: string;
   difficulty: 'easy' | 'medium' | 'hard';
   estimated_duration: number;
@@ -100,7 +100,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     if (!formData.name.trim()) return 'Task name is required';
     if (formData.name.trim().length < 3) return 'Task name must be at least 3 characters';
     if (!formData.category_id) return 'Please select a category';
-    if (!formData.assigned_to) return 'Please assign the task to someone';
+    // Assignment is now optional - removed assigned_to validation
     if (!formData.due_date) return 'Please set a due date';
     if (formData.estimated_duration <= 0) return 'Duration must be greater than 0';
     if (formData.points <= 0) return 'Points must be greater than 0';
@@ -154,18 +154,20 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
 
       if (taskError) throw taskError;
 
-      // Create the task assignment
-      const { error: assignmentError } = await supabase
-        .from('task_assignments')
-        .insert({
-          task_id: task.id,
-          assigned_to: formData.assigned_to,
-          due_date: formData.due_date,
-          assigned_by: user.id,
-          status: 'pending',
-        });
+      // Create the task assignment only if someone is assigned
+      if (formData.assigned_to) {
+        const { error: assignmentError } = await supabase
+          .from('task_assignments')
+          .insert({
+            task_id: task.id,
+            assigned_to: formData.assigned_to,
+            due_date: formData.due_date,
+            assigned_by: user.id,
+            status: 'pending',
+          });
 
-      if (assignmentError) throw assignmentError;
+        if (assignmentError) throw assignmentError;
+      }
 
       toast.success('Task created successfully!');
       onTaskCreated();
@@ -294,15 +296,14 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <User className="w-4 h-4 inline mr-1" />
-                        Assign To *
+                        Assign To
                       </label>
                       <select
                         value={formData.assigned_to}
                         onChange={(e) => handleInputChange('assigned_to', e.target.value)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
-                        required
                       >
-                        <option value="">Select a member</option>
+                        <option value="">🔄 Leave Unassigned (Anyone can claim)</option>
                         {householdMembers.map((member: HouseholdMember) => (
                           <option key={member.user_id} value={member.user_id}>
                             {member.user_profile?.display_name || 'Unknown User'}

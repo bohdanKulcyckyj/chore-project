@@ -7,16 +7,23 @@ import { supabase, Tables } from '../../lib/supabase';
 import TaskTable from './TaskTable';
 import AddTaskModal from './AddTaskModal';
 
-type TaskAssignment = Tables<'task_assignments'> & {
-  task: Tables<'tasks'>;
+type TaskWithAssignment = {
+  id: string;
+  task: Tables<'tasks'> & {
+    category?: Tables<'task_categories'>;
+  };
+  assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
-  category?: Tables<'task_categories'>;
+  due_date?: string;
+  status: string;
+  assigned_at?: string;
+  assigned_by?: string;
 };
 
 const TaskManagement: React.FC = () => {
   const { user } = useAuth();
   const { currentHousehold } = useHousehold();
-  const [tasks, setTasks] = useState<TaskAssignment[]>([]);
+  const [tasks, setTasks] = useState<TaskWithAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -28,23 +35,41 @@ const TaskManagement: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('task_assignments')
+      // First, fetch all tasks for the household
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('tasks')
         .select(`
           *,
-          task:tasks!inner(*,
-            category:task_categories(*)
-          )
+          category:task_categories(*)
         `)
-        .eq('task.household_id', currentHousehold.id)
-        .order('due_date', { ascending: true });
+        .eq('household_id', currentHousehold.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        throw fetchError;
+      if (tasksError) {
+        throw tasksError;
       }
 
-      // Fetch user profiles separately
-      const userIds = [...new Set(data?.map(t => t.assigned_to).filter(Boolean))];
+      // Fetch all assignments for these tasks
+      const taskIds = allTasks?.map(t => t.id) || [];
+      let assignments: Tables<'task_assignments'>[] = [];
+      
+      if (taskIds.length > 0) {
+        const { data: assignmentData, error: assignmentError } = await supabase
+          .from('task_assignments')
+          .select('*')
+          .in('task_id', taskIds)
+          .order('due_date', { ascending: true });
+
+        if (assignmentError) {
+          throw assignmentError;
+        }
+        
+        assignments = assignmentData || [];
+      }
+
+      // Fetch user profiles for assigned users
+      const userIds = [...new Set(assignments.map(a => a.assigned_to).filter(Boolean))];
       let userProfiles: Tables<'user_profiles'>[] = [];
       
       if (userIds.length > 0) {
@@ -56,13 +81,47 @@ const TaskManagement: React.FC = () => {
         userProfiles = profiles || [];
       }
 
-      // Merge user profiles with task assignments
-      const tasksWithUsers = (data || []).map(assignment => ({
-        ...assignment,
-        assigned_user: userProfiles.find(user => user.id === assignment.assigned_to)
-      }));
+      // Create combined task list with assignment info
+      const combinedTasks: TaskWithAssignment[] = [];
 
-      setTasks(tasksWithUsers as TaskAssignment[]);
+      // Add assigned tasks
+      assignments.forEach(assignment => {
+        const task = allTasks?.find(t => t.id === assignment.task_id);
+        if (task) {
+          combinedTasks.push({
+            id: assignment.id,
+            task,
+            assigned_to: assignment.assigned_to,
+            assigned_user: userProfiles.find(user => user.id === assignment.assigned_to),
+            due_date: assignment.due_date,
+            status: assignment.status,
+            assigned_at: assignment.assigned_at,
+            assigned_by: assignment.assigned_by,
+          });
+        }
+      });
+
+      // Add unassigned tasks
+      const assignedTaskIds = new Set(assignments.map(a => a.task_id));
+      allTasks?.forEach(task => {
+        if (!assignedTaskIds.has(task.id)) {
+          combinedTasks.push({
+            id: `unassigned-${task.id}`,
+            task,
+            status: 'unassigned',
+          });
+        }
+      });
+
+      // Sort by due date (unassigned tasks go to the end)
+      combinedTasks.sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      });
+
+      setTasks(combinedTasks);
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError('Failed to load tasks. Please try again.');
@@ -176,6 +235,13 @@ const TaskManagement: React.FC = () => {
         </div>
         
         <div className="bg-white rounded-lg p-4 shadow-sm border">
+          <div className="text-2xl font-bold text-purple-600">
+            {tasks.filter(t => t.status === 'unassigned').length}
+          </div>
+          <div className="text-sm text-gray-500">Unassigned</div>
+        </div>
+        
+        <div className="bg-white rounded-lg p-4 shadow-sm border">
           <div className="text-2xl font-bold text-blue-600">
             {tasks.filter(t => t.status === 'pending').length}
           </div>
@@ -187,13 +253,6 @@ const TaskManagement: React.FC = () => {
             {tasks.filter(t => t.status === 'in_progress').length}
           </div>
           <div className="text-sm text-gray-500">In Progress</div>
-        </div>
-        
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="text-2xl font-bold text-green-600">
-            {tasks.filter(t => t.status === 'completed').length}
-          </div>
-          <div className="text-sm text-gray-500">Completed</div>
         </div>
       </motion.div>
 

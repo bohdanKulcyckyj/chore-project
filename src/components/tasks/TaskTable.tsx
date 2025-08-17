@@ -13,22 +13,30 @@ import {
   Play,
   Pause,
   SortAsc,
-  SortDesc
+  SortDesc,
+  UserPlus
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { Tables } from '../../lib/supabase';
+import { Tables, supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
+import toast from 'react-hot-toast';
 
 // Types
-type Task = Tables<'tasks'>;
-type TaskAssignment = Tables<'task_assignments'> & {
-  task: Task & {
+type TaskWithAssignment = {
+  id: string;
+  task: Tables<'tasks'> & {
     category?: Tables<'task_categories'>;
   };
+  assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
+  due_date?: string;
+  status: string;
+  assigned_at?: string;
+  assigned_by?: string;
 };
 
 interface TaskTableProps {
-  tasks: TaskAssignment[];
+  tasks: TaskWithAssignment[];
   loading?: boolean;
   onTaskUpdate?: () => void;
 }
@@ -50,6 +58,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
   loading = false,
   onTaskUpdate 
 }) => {
+  const { user } = useAuth();
+  const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<FilterState>({
     status: '',
@@ -63,11 +73,61 @@ const TaskTable: React.FC<TaskTableProps> = ({
   });
   const [showFilters, setShowFilters] = useState(false);
 
+  const handleClaimTask = async (task: TaskWithAssignment) => {
+    if (!user || task.status !== 'unassigned') return;
+
+    setClaimingTaskId(task.id);
+    
+    try {
+      // Extract task ID from the unassigned task ID format
+      const taskId = task.id.startsWith('unassigned-') ? task.id.replace('unassigned-', '') : task.task.id;
+      
+      const { error } = await supabase
+        .from('task_assignments')
+        .insert({
+          task_id: taskId,
+          assigned_to: user.id,
+          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Default 7 days from now
+          assigned_by: user.id,
+          status: 'pending',
+        });
+
+      if (error) throw error;
+
+      toast.success('Task claimed successfully!');
+      onTaskUpdate?.();
+    } catch (error) {
+      console.error('Error claiming task:', error);
+      toast.error('Failed to claim task');
+    } finally {
+      setClaimingTaskId(null);
+    }
+  };
+
+  const getFieldValue = (task: TaskWithAssignment, field: string) => {
+    switch (field) {
+      case 'name':
+        return task.task.name.toLowerCase();
+      case 'due_date':
+        return task.due_date ? new Date(task.due_date).getTime() : 0;
+      case 'priority':
+        return task.task.difficulty;
+      case 'status':
+        return task.status;
+      case 'points':
+        return task.task.points;
+      default:
+        return '';
+    }
+  };
+
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
     const statuses = Array.from(new Set(tasks.map(t => t.status)));
     const categories = Array.from(new Set(tasks.map(t => t.task.category?.name).filter(Boolean)));
-    const assignees = Array.from(new Set(tasks.map(t => t.assigned_user?.display_name).filter(Boolean)));
+    const assignees = Array.from(new Set(tasks.map(t => 
+      t.status === 'unassigned' ? 'Available' : t.assigned_user?.display_name
+    ).filter(Boolean)));
     
     return { statuses, categories, assignees };
   }, [tasks]);
@@ -81,7 +141,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
       
       const matchesStatus = !filters.status || task.status === filters.status;
       const matchesCategory = !filters.category || task.task.category?.name === filters.category;
-      const matchesAssignee = !filters.assignedTo || task.assigned_user?.display_name === filters.assignedTo;
+      const matchesAssignee = !filters.assignedTo || 
+        (filters.assignedTo === 'Available' && task.status === 'unassigned') ||
+        (filters.assignedTo !== 'Available' && task.assigned_user?.display_name === filters.assignedTo);
       
       return matchesSearch && matchesStatus && matchesCategory && matchesAssignee;
     });
@@ -100,23 +162,6 @@ const TaskTable: React.FC<TaskTableProps> = ({
     return filtered;
   }, [tasks, searchTerm, filters, sort]);
 
-  const getFieldValue = (task: TaskAssignment, field: string) => {
-    switch (field) {
-      case 'name':
-        return task.task.name.toLowerCase();
-      case 'due_date':
-        return task.due_date ? new Date(task.due_date).getTime() : 0;
-      case 'priority':
-        return task.task.difficulty;
-      case 'status':
-        return task.status;
-      case 'points':
-        return task.task.points;
-      default:
-        return '';
-    }
-  };
-
   const handleSort = (field: string) => {
     setSort(prev => ({
       field,
@@ -134,6 +179,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       case 'skipped':
         return <Pause className="w-4 h-4 text-gray-500" />;
+      case 'unassigned':
+        return <UserPlus className="w-4 h-4 text-purple-500" />;
       default:
         return <Clock className="w-4 h-4 text-gray-400" />;
     }
@@ -149,6 +196,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
         return 'bg-red-100 text-red-800';
       case 'skipped':
         return 'bg-gray-100 text-gray-800';
+      case 'unassigned':
+        return 'bg-purple-100 text-purple-800';
       default:
         return 'bg-yellow-100 text-yellow-800';
     }
@@ -336,12 +385,15 @@ const TaskTable: React.FC<TaskTableProps> = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <SortButton field="points">Points</SortButton>
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredAndSortedTasks.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center">
+                <td colSpan={8} className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center">
                     <Clock className="w-12 h-12 text-gray-300 mb-4" />
                     <p className="text-gray-500">
@@ -376,11 +428,15 @@ const TaskTable: React.FC<TaskTableProps> = ({
                   
                   <td className="px-6 py-4">
                     <div className="flex items-center">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                        <User className="w-4 h-4 text-blue-600" />
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                        assignment.status === 'unassigned' ? 'bg-purple-100' : 'bg-blue-100'
+                      }`}>
+                        <User className={`w-4 h-4 ${
+                          assignment.status === 'unassigned' ? 'text-purple-600' : 'text-blue-600'
+                        }`} />
                       </div>
                       <span className="text-sm text-gray-900">
-                        {assignment.assigned_user?.display_name || 'Unassigned'}
+                        {assignment.status === 'unassigned' ? 'Available' : (assignment.assigned_user?.display_name || 'Unknown')}
                       </span>
                     </div>
                   </td>
@@ -427,6 +483,28 @@ const TaskTable: React.FC<TaskTableProps> = ({
                     <span className="text-sm font-medium text-gray-900">
                       {assignment.task.points}
                     </span>
+                  </td>
+                  
+                  <td className="px-6 py-4">
+                    {assignment.status === 'unassigned' && (
+                      <button
+                        onClick={() => handleClaimTask(assignment)}
+                        disabled={claimingTaskId === assignment.id}
+                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {claimingTaskId === assignment.id ? (
+                          <>
+                            <div className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin mr-1" />
+                            Claiming...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3 h-3 mr-1" />
+                            Claim Task
+                          </>
+                        )}
+                      </button>
+                    )}
                   </td>
                 </motion.tr>
               ))
@@ -475,9 +553,11 @@ const TaskTable: React.FC<TaskTableProps> = ({
               <div className="grid grid-cols-2 gap-3 mb-3">
                 {/* Assigned User */}
                 <div className="flex items-center">
-                  <User className="w-4 h-4 text-gray-400 mr-2" />
+                  <User className={`w-4 h-4 mr-2 ${
+                    assignment.status === 'unassigned' ? 'text-purple-400' : 'text-gray-400'
+                  }`} />
                   <span className="text-sm text-gray-900 truncate">
-                    {assignment.assigned_user?.display_name || 'Unassigned'}
+                    {assignment.status === 'unassigned' ? 'Available' : (assignment.assigned_user?.display_name || 'Unknown')}
                   </span>
                 </div>
 
@@ -508,9 +588,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
                 </div>
               </div>
 
-              {/* Bottom Row - Status, Category, Priority */}
+              {/* Bottom Row - Status, Category, Priority, Actions */}
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* Status */}
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(assignment.status)}`}>
                     {assignment.status.replace('_', ' ')}
@@ -520,14 +600,35 @@ const TaskTable: React.FC<TaskTableProps> = ({
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(assignment.task.difficulty)}`}>
                     {assignment.task.difficulty}
                   </span>
+
+                  {/* Category */}
+                  {assignment.task.category && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <Tag className="w-3 h-3 mr-1" />
+                      {assignment.task.category.name}
+                    </span>
+                  )}
                 </div>
 
-                {/* Category */}
-                {assignment.task.category && (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    <Tag className="w-3 h-3 mr-1" />
-                    {assignment.task.category.name}
-                  </span>
+                {/* Claim Action */}
+                {assignment.status === 'unassigned' && (
+                  <button
+                    onClick={() => handleClaimTask(assignment)}
+                    disabled={claimingTaskId === assignment.id}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {claimingTaskId === assignment.id ? (
+                      <>
+                        <div className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin mr-1" />
+                        Claiming...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-3 h-3 mr-1" />
+                        Claim
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
             </motion.div>
