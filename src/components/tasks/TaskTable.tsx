@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import toast from 'react-hot-toast';
+import TaskActionsMenu from './TaskActionsMenu';
 
 // Types
 type TaskWithAssignment = {
@@ -102,6 +103,27 @@ const TaskTable: React.FC<TaskTableProps> = ({
     } finally {
       setClaimingTaskId(null);
     }
+  };
+
+  // Placeholder handlers for new actions
+  const handleEditTask = async (task: TaskWithAssignment) => {
+    // TODO: Implement task editing functionality
+    toast('Edit task functionality coming soon!', { icon: '🚧' });
+  };
+
+  const handleArchiveTask = async (task: TaskWithAssignment) => {
+    // TODO: Implement task archiving functionality
+    toast('Archive task functionality coming soon!', { icon: '🚧' });
+  };
+
+  const handleReassignTask = async (task: TaskWithAssignment) => {
+    // TODO: Implement task reassignment functionality
+    toast('Reassign task functionality coming soon!', { icon: '🚧' });
+  };
+
+  const handleMarkComplete = async (task: TaskWithAssignment) => {
+    // TODO: Implement mark complete functionality
+    toast('Mark complete functionality coming soon!', { icon: '🚧' });
   };
 
   const getFieldValue = (task: TaskWithAssignment, field: string) => {
@@ -385,7 +407,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <SortButton field="points">Points</SortButton>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                 Actions
               </th>
             </tr>
@@ -485,26 +507,16 @@ const TaskTable: React.FC<TaskTableProps> = ({
                     </span>
                   </td>
                   
-                  <td className="px-6 py-4">
-                    {assignment.status === 'unassigned' && (
-                      <button
-                        onClick={() => handleClaimTask(assignment)}
-                        disabled={claimingTaskId === assignment.id}
-                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {claimingTaskId === assignment.id ? (
-                          <>
-                            <div className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin mr-1" />
-                            Claiming...
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus className="w-3 h-3 mr-1" />
-                            Claim Task
-                          </>
-                        )}
-                      </button>
-                    )}
+                  <td className="px-4 py-4 text-center w-24">
+                    <TaskActionsMenu
+                      task={assignment}
+                      onClaimTask={handleClaimTask}
+                      onEditTask={handleEditTask}
+                      onArchiveTask={handleArchiveTask}
+                      onReassignTask={handleReassignTask}
+                      onMarkComplete={handleMarkComplete}
+                      isLoading={claimingTaskId === assignment.id}
+                    />
                   </td>
                 </motion.tr>
               ))
@@ -610,26 +622,18 @@ const TaskTable: React.FC<TaskTableProps> = ({
                   )}
                 </div>
 
-                {/* Claim Action */}
-                {assignment.status === 'unassigned' && (
-                  <button
-                    onClick={() => handleClaimTask(assignment)}
-                    disabled={claimingTaskId === assignment.id}
-                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {claimingTaskId === assignment.id ? (
-                      <>
-                        <div className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin mr-1" />
-                        Claiming...
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-3 h-3 mr-1" />
-                        Claim
-                      </>
-                    )}
-                  </button>
-                )}
+                {/* Task Actions */}
+                <div className="flex justify-center">
+                  <TaskActionsMenu
+                    task={assignment}
+                    onClaimTask={handleClaimTask}
+                    onEditTask={handleEditTask}
+                    onArchiveTask={handleArchiveTask}
+                    onReassignTask={handleReassignTask}
+                    onMarkComplete={handleMarkComplete}
+                    isLoading={claimingTaskId === assignment.id}
+                  />
+                </div>
               </div>
             </motion.div>
           ))
