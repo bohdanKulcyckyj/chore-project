@@ -1,6 +1,5 @@
-import React from 'react';
-import { Menu, MenuButton, MenuItems, MenuItem, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface DropdownMenuItem {
   id: string;
@@ -24,57 +23,138 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   align = 'right',
   className = ''
 }) => {
-  return (
-    <Menu as="div" className={`relative inline-block ${className}`}>
-      <MenuButton className="flex items-center justify-center p-1 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
-        {trigger}
-      </MenuButton>
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-      <Transition
-        as={Fragment}
-        enter="transition ease-out duration-100"
-        enterFrom="transform opacity-0 scale-95"
-        enterTo="transform opacity-100 scale-100"
-        leave="transition ease-in duration-75"
-        leaveFrom="transform opacity-100 scale-100"
-        leaveTo="transform opacity-0 scale-95"
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const dropdownWidth = 160; // min-w-40
+      const dropdownHeight = items.length * 40 + 8;
+      const gap = 4;
+      const margin = 8;
+
+      // Calculate horizontal position
+      let left = align === 'right' 
+        ? rect.right + window.scrollX - dropdownWidth
+        : rect.left + window.scrollX;
+      
+      // Keep within viewport horizontally
+      if (left + dropdownWidth > window.innerWidth + window.scrollX) {
+        left = window.innerWidth + window.scrollX - dropdownWidth - margin;
+      }
+      if (left < window.scrollX + margin) {
+        left = window.scrollX + margin;
+      }
+
+      // Calculate vertical position - prefer above
+      let top = rect.top + window.scrollY - dropdownHeight - gap;
+      
+      // If not enough space above, position below
+      if (top < window.scrollY + margin) {
+        top = rect.bottom + window.scrollY + gap;
+      }
+
+      setPosition({ top, left });
+    }
+  }, [align, items.length]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscapeKey);
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  const handleButtonClick = () => {
+    if (!isOpen) {
+      updatePosition();
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={handleButtonClick}
+        className={`relative inline-block flex items-center justify-center p-1 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${className}`}
+        aria-haspopup="true"
+        aria-expanded={isOpen}
       >
-        <MenuItems className={`absolute z-50 bottom-full mb-1 min-w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 focus:outline-none ${
-          align === 'right' ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
-        }`}>
+        {trigger}
+      </button>
+
+      {isOpen && createPortal(
+        <div
+          className="fixed z-[9999] min-w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
+          style={{
+            top: position.top,
+            left: position.left,
+            opacity: isOpen ? 1 : 0,
+            transform: isOpen ? 'scale(1)' : 'scale(0.95)',
+            transition: 'opacity 100ms ease-out, transform 100ms ease-out'
+          }}
+          role="menu"
+          aria-orientation="vertical"
+        >
           {items.map((item) => (
-            <MenuItem key={item.id} disabled={item.disabled}>
-              {({ focus }) => (
-                <button
-                  onClick={item.onClick}
-                  disabled={item.disabled}
-                  className={`
-                    w-full flex items-center px-4 py-2 text-sm text-left transition-colors
-                    ${item.disabled 
-                      ? 'text-gray-400 cursor-not-allowed' 
-                      : item.variant === 'danger'
-                        ? focus 
-                          ? 'bg-red-50 text-red-800' 
-                          : 'text-red-700'
-                        : focus 
-                          ? 'bg-gray-50 text-gray-900' 
-                          : 'text-gray-700'
-                    }
-                  `}
-                >
-                  {item.icon && (
-                    <span className="mr-3 flex-shrink-0">
-                      {item.icon}
-                    </span>
-                  )}
-                  {item.label}
-                </button>
+            <button
+              key={item.id}
+              onClick={() => {
+                if (!item.disabled) {
+                  item.onClick();
+                  setIsOpen(false);
+                }
+              }}
+              disabled={item.disabled}
+              onMouseEnter={(e) => e.currentTarget.classList.add('bg-gray-50')}
+              onMouseLeave={(e) => e.currentTarget.classList.remove('bg-gray-50')}
+              className={`
+                w-full flex items-center px-4 py-2 text-sm text-left transition-colors
+                ${item.disabled 
+                  ? 'text-gray-400 cursor-not-allowed' 
+                  : item.variant === 'danger'
+                    ? 'text-red-700 hover:bg-red-50 hover:text-red-800'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                }
+              `}
+              role="menuitem"
+            >
+              {item.icon && (
+                <span className="mr-3 flex-shrink-0">
+                  {item.icon}
+                </span>
               )}
-            </MenuItem>
+              {item.label}
+            </button>
           ))}
-        </MenuItems>
-      </Transition>
-    </Menu>
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 
