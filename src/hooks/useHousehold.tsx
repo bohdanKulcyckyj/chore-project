@@ -206,7 +206,10 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
         .single();
 
       if (existingMember) {
-        return { error: { message: 'Already a member of this household' } };
+        // If already a member, just switch to that household
+        await refreshData();
+        setCurrentHousehold(household);
+        return { data: household, error: null, message: 'Switched to household - you were already a member!' };
       }
 
       // Add as member

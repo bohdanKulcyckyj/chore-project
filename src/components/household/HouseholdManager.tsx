@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Plus, Users, Code, ArrowLeft } from 'lucide-react';
 import { useHousehold } from '../../hooks/useHousehold';
+import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 const HouseholdManager: React.FC = () => {
@@ -13,6 +14,7 @@ const HouseholdManager: React.FC = () => {
     switchHousehold
   } = useHousehold();
   
+  const location = useLocation();
   const [view, setView] = useState<'main' | 'create' | 'join'>('main');
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,6 +22,20 @@ const HouseholdManager: React.FC = () => {
     description: '',
     inviteCode: '',
   });
+
+  // Check for invite code in URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const inviteCode = urlParams.get('invite');
+    
+    if (inviteCode) {
+      // Auto-populate the invite code and switch to join view
+      setFormData(prev => ({ ...prev, inviteCode: inviteCode.toUpperCase() }));
+      setView('join');
+      // Clear the URL parameter
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [location]);
 
   const handleCreateHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,10 +62,12 @@ const HouseholdManager: React.FC = () => {
 
     setLoading(true);
     try {
-      const { error } = await joinHousehold(formData.inviteCode);
-      if (error) throw error;
+      const result = await joinHousehold(formData.inviteCode);
+      if (result.error) throw result.error;
       
-      toast.success('Joined household successfully!');
+      // Show appropriate message based on whether they joined or switched
+      const message = result.message || 'Joined household successfully!';
+      toast.success(message);
       setView('main');
       setFormData({ name: '', description: '', inviteCode: '' });
     } catch (error: any) {

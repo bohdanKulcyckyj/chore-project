@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { Menu, X } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -11,6 +11,26 @@ import TaskManagement from './components/tasks/TaskManagement';
 import Household from './components/household/Household';
 import Approvals from './components/approvals/Approvals';
 import Sidebar from './components/layout/Sidebar';
+
+const InviteHandler: React.FC = () => {
+  const { inviteCode } = useParams<{ inviteCode: string }>();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && inviteCode) {
+      // If user is logged in, redirect to household manager with invite code
+      navigate(`/?invite=${inviteCode}`);
+    }
+  }, [user, inviteCode, navigate]);
+
+  // If not logged in, show auth form - invite code will be preserved in URL
+  if (!user) {
+    return <AuthForm mode="signin" onModeChange={() => {}} />;
+  }
+
+  return null;
+};
 
 const AppContent: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -146,7 +166,10 @@ const App: React.FC = () => {
     <AuthProvider>
       <HouseholdProvider>
         <Router>
-          <AppContent />
+          <Routes>
+            <Route path="/invite/:inviteCode" element={<InviteHandler />} />
+            <Route path="/*" element={<AppContent />} />
+          </Routes>
           <Toaster 
             position="top-right"
             toastOptions={{

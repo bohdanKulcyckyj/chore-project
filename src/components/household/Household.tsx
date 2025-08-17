@@ -40,6 +40,14 @@ const Household: React.FC = () => {
     }
   };
 
+  const handleInviteMember = () => {
+    if (currentHousehold?.invite_code) {
+      const inviteLink = `${window.location.origin}/invite/${currentHousehold.invite_code}`;
+      navigator.clipboard.writeText(inviteLink);
+      toast.success('Invite link copied to clipboard!');
+    }
+  };
+
   const handleRoleChange = async (memberId: string, newRole: 'admin' | 'member') => {
     if (!isAdmin || memberId === user?.id) return;
 
@@ -187,8 +195,8 @@ const Household: React.FC = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={handleInviteMember}
               className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center gap-2"
-              disabled
             >
               <UserPlus className="w-4 h-4" />
               Invite Member
