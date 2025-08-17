@@ -3,6 +3,7 @@
 ## High Priority Features
 
 ### Task Management
+- [ ] Implement task table list view with filtering and sorting
 - [ ] Implement task creation form with all properties
 - [ ] Add task editing functionality
 - [ ] Implement task deletion with confirmation

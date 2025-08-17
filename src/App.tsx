@@ -7,6 +7,7 @@ import { HouseholdProvider, useHousehold } from './hooks/useHousehold';
 import AuthForm from './components/auth/AuthForm';
 import HouseholdManager from './components/household/HouseholdManager';
 import Dashboard from './components/dashboard/Dashboard';
+import TaskManagement from './components/tasks/TaskManagement';
 import Sidebar from './components/layout/Sidebar';
 
 const AppContent: React.FC = () => {
@@ -111,12 +112,7 @@ const AppContent: React.FC = () => {
         
         <main className="min-h-screen">
           {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'tasks' && (
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
-              <p className="text-gray-600 mt-2">Task management coming soon...</p>
-            </div>
-          )}
+          {activeTab === 'tasks' && <TaskManagement />}
           {activeTab === 'calendar' && (
             <div className="p-6">
               <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
