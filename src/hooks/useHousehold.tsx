@@ -188,7 +188,13 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     if (!user) return { error: { message: 'Not authenticated' } };
 
     try {
-      console.log('Attempting to join household with invite code:', inviteCode.trim());
+      // First, let's see what households exist and their invite codes
+      const { data: allHouseholds, error: debugError } = await supabase
+        .from('households')
+        .select('id, name, invite_code');
+        
+      console.log('All households in database:', allHouseholds);
+      console.log('Looking for invite code:', inviteCode.trim());
       
       // Find household by invite code
       const { data: household, error: findError } = await supabase

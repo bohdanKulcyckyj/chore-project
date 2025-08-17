@@ -30,7 +30,7 @@ const HouseholdManager: React.FC = () => {
     
     if (inviteCode) {
       // Auto-populate the invite code and switch to join view
-      setFormData(prev => ({ ...prev, inviteCode: inviteCode.toUpperCase() }));
+      setFormData(prev => ({ ...prev, inviteCode: inviteCode }));
       setView('join');
       // Clear the URL parameter
       window.history.replaceState({}, '', window.location.pathname);
@@ -315,7 +315,7 @@ const HouseholdManager: React.FC = () => {
                     <input
                       type="text"
                       value={formData.inviteCode}
-                      onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value.toUpperCase() })}
+                      onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-mono text-center text-lg"
                       placeholder="ABC123"
                       required
