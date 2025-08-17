@@ -9,7 +9,10 @@ import {
   Settings,
   LogOut,
   Star,
-  X
+  X,
+  Shield,
+  UserPlus,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
@@ -30,15 +33,24 @@ const Sidebar: React.FC<SidebarProps> = ({
   isMobile 
 }) => {
   const { signOut } = useAuth();
-  const { currentHousehold } = useHousehold();
+  const { currentHousehold, isAdmin } = useHousehold();
 
-  const menuItems = [
+  const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'text-blue-500' },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare, color: 'text-emerald-500' },
     { id: 'calendar', label: 'Calendar', icon: Calendar, color: 'text-purple-500' },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, color: 'text-yellow-500' },
     { id: 'household', label: 'Household', icon: Users, color: 'text-pink-500' },
   ];
+
+  const adminMenuItems = [
+    { id: 'approvals', label: 'Approvals', icon: Clock, color: 'text-orange-500' },
+  ];
+
+  // Add admin-only menu items
+  const menuItems = isAdmin 
+    ? [...baseMenuItems, ...adminMenuItems]
+    : baseMenuItems;
 
   const bottomMenuItems = [
     { id: 'settings', label: 'Settings', icon: Settings, color: 'text-gray-500' },
@@ -65,9 +77,17 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="flex-1">
             <h2 className="font-bold text-gray-900">ChoreQuest</h2>
-            <p className="text-sm text-gray-500 truncate">
-              {currentHousehold?.name || 'No household'}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-500 truncate">
+                {currentHousehold?.name || 'No household'}
+              </p>
+              {isAdmin && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">
+                  <Shield className="w-3 h-3" />
+                  <span className="text-xs font-medium">Admin</span>
+                </div>
+              )}
+            </div>
           </div>
           {isMobile && (
             <button
@@ -111,11 +131,24 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Quick Stats */}
         <div className="mx-4 mt-8 p-4 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
-            <Star className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm font-medium text-gray-700">Your Level</span>
+            {isAdmin ? (
+              <>
+                <Shield className="w-4 h-4 text-orange-500" />
+                <span className="text-sm font-medium text-gray-700">Administrator</span>
+              </>
+            ) : (
+              <>
+                <Star className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-medium text-gray-700">Your Level</span>
+              </>
+            )}
           </div>
-          <p className="text-lg font-bold text-gray-900">Novice</p>
-          <p className="text-sm text-gray-500">Keep going! 🚀</p>
+          <p className="text-lg font-bold text-gray-900">
+            {isAdmin ? 'Admin Panel' : 'Novice'}
+          </p>
+          <p className="text-sm text-gray-500">
+            {isAdmin ? 'Manage your household 🏠' : 'Keep going! 🚀'}
+          </p>
         </div>
       </div>
 

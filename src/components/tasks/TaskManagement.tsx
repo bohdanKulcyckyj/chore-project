@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckSquare, Plus, Download, Upload } from 'lucide-react';
+import { CheckSquare, Plus, Download, Upload, Users, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
 import TaskTable from './TaskTable';
 import AddTaskModal from './AddTaskModal';
+import AdminGuard from '../auth/AdminGuard';
+import RoleBasedComponent from '../auth/RoleBasedComponent';
+import AvailableTasksView from './AvailableTasksView';
+import PersonalTaskStats from './PersonalTaskStats';
 
 type TaskWithAssignment = {
   id: string;
@@ -186,39 +190,66 @@ const TaskManagement: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Buttons (Placeholder for future functionality) */}
+        {/* Action Buttons */}
         <div className="flex gap-3">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
-            disabled
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </motion.button>
-          
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
-            disabled
-          >
-            <Upload className="w-4 h-4" />
-            Import
-          </motion.button>
-          
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Task
-          </motion.button>
+          <AdminGuard>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+              disabled
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+              disabled
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Task
+            </motion.button>
+          </AdminGuard>
         </div>
       </motion.div>
+
+      {/* Role-based Information */}
+      <RoleBasedComponent
+        memberContent={
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="bg-blue-50 border border-blue-200 rounded-lg p-4"
+          >
+            <div className="flex items-start gap-3">
+              <Users className="w-5 h-5 text-blue-500 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-medium text-blue-800">
+                  Household Member View
+                </h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  You can view all tasks, assign unassigned tasks to yourself, and complete your assigned tasks. 
+                  Contact your household admin to create new tasks.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        }
+      />
 
       {/* Stats Summary */}
       <motion.div
@@ -256,6 +287,29 @@ const TaskManagement: React.FC = () => {
         </div>
       </motion.div>
 
+      {/* Member-specific Components */}
+      <RoleBasedComponent
+        memberContent={
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <PersonalTaskStats />
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <AvailableTasksView onTaskClaimed={handleTaskUpdate} />
+            </motion.div>
+          </div>
+        }
+      />
+
       {/* Task Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -270,11 +324,13 @@ const TaskManagement: React.FC = () => {
       </motion.div>
 
       {/* Add Task Modal */}
-      <AddTaskModal 
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onTaskCreated={handleTaskUpdate}
-      />
+      <AdminGuard>
+        <AddTaskModal 
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onTaskCreated={handleTaskUpdate}
+        />
+      </AdminGuard>
     </div>
   );
 };

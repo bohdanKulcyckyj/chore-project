@@ -19,7 +19,9 @@ import {
 import { format } from 'date-fns';
 import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useHousehold } from '../../hooks/useHousehold';
 import toast from 'react-hot-toast';
+import AdminGuard from '../auth/AdminGuard';
 import CompleteTaskModal from './CompleteTaskModal';
 import TaskDetailModal from './TaskDetailModal';
 import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
@@ -313,6 +315,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     }
   };
 
+  // Alias for compatibility (in case of cached references)
+  const getStatusVariant = getStatusColor;
+
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'easy':
@@ -344,66 +349,78 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     </Button>
   );
 
-  const TaskActionsDropdown: React.FC<{ task: TaskWithAssignment }> = ({ task }) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="sm"
-          className="h-8 w-8 p-0"
-          disabled={claimingTaskId === task.id}
-        >
-          <MoreVertical className="h-4 w-4" />
-          <span className="sr-only">Open menu</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {task.status === 'unassigned' ? (
-          <>
-            <DropdownMenuItem onClick={() => handleClaimTask(task)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Claim Task
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleEditTask(task)}>
-              <Edit3 className="mr-2 h-4 w-4" />
-              Edit Task
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => handleArchiveTask(task)}
-              className="text-destructive"
-            >
-              <Archive className="mr-2 h-4 w-4" />
-              Archive Task
-            </DropdownMenuItem>
-          </>
-        ) : (
-          <>
-            {task.status !== 'completed' && (
-              <DropdownMenuItem onClick={() => handleMarkComplete(task)}>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Mark Complete
+  const TaskActionsDropdown: React.FC<{ task: TaskWithAssignment }> = ({ task }) => {
+    const { isAdmin } = useHousehold();
+    
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="h-8 w-8 p-0"
+            disabled={claimingTaskId === task.id}
+          >
+            <MoreVertical className="h-4 w-4" />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {task.status === 'unassigned' ? (
+            <>
+              <DropdownMenuItem onClick={() => handleClaimTask(task)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Claim Task
               </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => handleEditTask(task)}>
-              <Edit3 className="mr-2 h-4 w-4" />
-              Edit Assignment
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleReassignTask(task)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Reassign Task
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => handleArchiveTask(task)}
-              className="text-destructive"
-            >
-              <Archive className="mr-2 h-4 w-4" />
-              Archive Task
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+              {isAdmin && (
+                <>
+                  <DropdownMenuItem onClick={() => handleEditTask(task)}>
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Edit Task
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleArchiveTask(task)}
+                    className="text-destructive"
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive Task
+                  </DropdownMenuItem>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {(task.status !== 'completed' && (task.assigned_to === user?.id || isAdmin)) && (
+                <DropdownMenuItem onClick={() => handleMarkComplete(task)}>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Mark Complete
+                </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <>
+                  <DropdownMenuItem onClick={() => handleEditTask(task)}>
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Edit Assignment
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleReassignTask(task)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Reassign Task
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleArchiveTask(task)}
+                    className="text-destructive"
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive Task
+                  </DropdownMenuItem>
+                </>
+              )}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
 
   if (loading) {
     return (

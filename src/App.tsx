@@ -8,6 +8,8 @@ import AuthForm from './components/auth/AuthForm';
 import HouseholdManager from './components/household/HouseholdManager';
 import Dashboard from './components/dashboard/Dashboard';
 import TaskManagement from './components/tasks/TaskManagement';
+import Household from './components/household/Household';
+import Approvals from './components/approvals/Approvals';
 import Sidebar from './components/layout/Sidebar';
 
 const AppContent: React.FC = () => {
@@ -113,6 +115,8 @@ const AppContent: React.FC = () => {
         <main className="min-h-screen">
           {activeTab === 'dashboard' && <Dashboard />}
           {activeTab === 'tasks' && <TaskManagement />}
+          {activeTab === 'approvals' && <Approvals />}
+          {activeTab === 'household' && <Household />}
           {activeTab === 'calendar' && (
             <div className="p-6">
               <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
@@ -123,12 +127,6 @@ const AppContent: React.FC = () => {
             <div className="p-6">
               <h1 className="text-2xl font-bold text-gray-900">Leaderboard</h1>
               <p className="text-gray-600 mt-2">Leaderboard view coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'household' && (
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900">Household Settings</h1>
-              <p className="text-gray-600 mt-2">Household management coming soon...</p>
             </div>
           )}
           {activeTab === 'settings' && (
