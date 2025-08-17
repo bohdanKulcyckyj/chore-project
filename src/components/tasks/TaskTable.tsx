@@ -9,9 +9,6 @@ import {
   Tag,
   Clock,
   CheckCircle,
-  AlertCircle,
-  Play,
-  Pause,
   SortAsc,
   SortDesc,
   UserPlus,
@@ -296,50 +293,36 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     }));
   };
 
-  const getStatusIcon = (status: string) => {
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'in_progress':
-        return <Play className="w-4 h-4 text-blue-500" />;
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'overdue':
-        return <AlertCircle className="w-4 h-4 text-red-500" />;
+        return 'bg-red-100 text-red-800 border-red-200';
       case 'skipped':
-        return <Pause className="w-4 h-4 text-gray-500" />;
+        return 'bg-gray-100 text-gray-800 border-gray-200';
       case 'unassigned':
-        return <UserPlus className="w-4 h-4 text-purple-500" />;
+        return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'pending':
+        return 'bg-amber-100 text-amber-800 border-amber-200';
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />;
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
-      case 'completed':
-        return 'default';
-      case 'in_progress':
-        return 'default';
-      case 'overdue':
-        return 'destructive';
-      case 'skipped':
-        return 'secondary';
-      case 'unassigned':
-        return 'outline';
-      default:
-        return 'secondary';
-    }
-  };
-
-  const getDifficultyVariant = (difficulty: string): "default" | "secondary" | "destructive" | "outline" => {
+  const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'easy':
-        return 'default';
+        return 'bg-green-100 text-green-800 border-green-200';
       case 'medium':
-        return 'secondary';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'hard':
-        return 'destructive';
+        return 'bg-orange-100 text-orange-800 border-orange-200';
       default:
-        return 'outline';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -656,18 +639,15 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   </TableCell>
                   
                   <TableCell>
-                    <Badge variant={getDifficultyVariant(assignment.task.difficulty)}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
                       {assignment.task.difficulty}
-                    </Badge>
+                    </span>
                   </TableCell>
                   
                   <TableCell>
-                    <div className="flex items-center">
-                      {getStatusIcon(assignment.status)}
-                      <Badge variant={getStatusVariant(assignment.status)} className="ml-2">
-                        {assignment.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
+                      {assignment.status.replace('_', ' ')}
+                    </span>
                   </TableCell>
                   
                   <TableCell>
@@ -720,9 +700,6 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                     {assignment.task.description}
                   </p>
                 </div>
-                <div className="ml-3 flex items-center">
-                  {getStatusIcon(assignment.status)}
-                </div>
               </div>
 
               {/* Task Details Grid */}
@@ -768,14 +745,14 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Status */}
-                  <Badge variant={getStatusVariant(assignment.status)}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
                     {assignment.status.replace('_', ' ')}
-                  </Badge>
+                  </span>
                   
                   {/* Priority */}
-                  <Badge variant={getDifficultyVariant(assignment.task.difficulty)}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
                     {assignment.task.difficulty}
-                  </Badge>
+                  </span>
 
                   {/* Category */}
                   {assignment.task.category && (

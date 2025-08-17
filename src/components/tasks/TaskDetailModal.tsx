@@ -5,7 +5,7 @@ import {
   Calendar, 
   Clock, 
   User, 
-  Tag, 
+  Tag,
   Target,
   CheckCircle,
   Play,
@@ -61,24 +61,24 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className="w-4 h-4" />;
       case 'in_progress':
-        return <Play className="w-5 h-5 text-blue-500" />;
+        return <Play className="w-4 h-4" />;
       case 'overdue':
-        return <AlertCircle className="w-5 h-5 text-red-500" />;
+        return <AlertCircle className="w-4 h-4" />;
       case 'skipped':
-        return <Pause className="w-5 h-5 text-gray-500" />;
+        return <Pause className="w-4 h-4" />;
       case 'unassigned':
-        return <UserPlus className="w-5 h-5 text-purple-500" />;
+        return <UserPlus className="w-4 h-4" />;
       default:
-        return <Clock className="w-5 h-5 text-gray-400" />;
+        return <Clock className="w-4 h-4" />;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'in_progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'overdue':
@@ -87,6 +87,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         return 'bg-gray-100 text-gray-800 border-gray-200';
       case 'unassigned':
         return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'pending':
+        return 'bg-amber-100 text-amber-800 border-amber-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -99,7 +101,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       case 'medium':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'hard':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-orange-100 text-orange-800 border-orange-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -137,7 +139,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                {getStatusIcon(task.status)}
                 <h2 className="text-xl font-bold text-gray-900">Task Details</h2>
               </div>
               <Button
