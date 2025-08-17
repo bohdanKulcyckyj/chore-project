@@ -91,10 +91,10 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<FilterState>({
-    status: '',
-    category: '',
-    assignedTo: '',
-    dateRange: ''
+    status: '__all__',
+    category: '__all__',
+    assignedTo: '__all__',
+    dateRange: '__all__'
   });
   const [sort, setSort] = useState<SortState>({
     field: 'due_date',
@@ -134,19 +134,19 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   };
 
   // Placeholder handlers for new actions
-  const handleEditTask = async (task: TaskWithAssignment) => {
+  const handleEditTask = async (_task: TaskWithAssignment) => {
     toast('Edit task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleArchiveTask = async (task: TaskWithAssignment) => {
+  const handleArchiveTask = async (_task: TaskWithAssignment) => {
     toast('Archive task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleReassignTask = async (task: TaskWithAssignment) => {
+  const handleReassignTask = async (_task: TaskWithAssignment) => {
     toast('Reassign task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleMarkComplete = async (task: TaskWithAssignment) => {
+  const handleMarkComplete = async (_task: TaskWithAssignment) => {
     toast('Mark complete functionality coming soon!', { icon: '🚧' });
   };
 
@@ -180,14 +180,14 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
 
   // Filter and sort tasks
   const filteredAndSortedTasks = useMemo(() => {
-    let filtered = tasks.filter(task => {
+    const filtered = tasks.filter(task => {
       const matchesSearch = 
         task.task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.task.description.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesStatus = !filters.status || task.status === filters.status;
-      const matchesCategory = !filters.category || task.task.category?.name === filters.category;
-      const matchesAssignee = !filters.assignedTo || 
+      const matchesStatus = !filters.status || filters.status === '__all__' || task.status === filters.status;
+      const matchesCategory = !filters.category || filters.category === '__all__' || task.task.category?.name === filters.category;
+      const matchesAssignee = !filters.assignedTo || filters.assignedTo === '__all__' || 
         (filters.assignedTo === 'Available' && task.status === 'unassigned') ||
         (filters.assignedTo !== 'Available' && task.assigned_user?.display_name === filters.assignedTo);
       
@@ -407,7 +407,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
+                  <SelectItem value="__all__">All Statuses</SelectItem>
                   {filterOptions.statuses.map(status => (
                     <SelectItem key={status} value={status}>
                       {status.replace('_', ' ').toUpperCase()}
@@ -424,9 +424,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="__all__">All Categories</SelectItem>
                   {filterOptions.categories.map(category => (
-                    <SelectItem key={category} value={category}>
+                    <SelectItem key={category} value={category || '__unknown__'}>
                       {category}
                     </SelectItem>
                   ))}
@@ -441,9 +441,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   <SelectValue placeholder="All Members" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Members</SelectItem>
+                  <SelectItem value="__all__">All Members</SelectItem>
                   {filterOptions.assignees.map(assignee => (
-                    <SelectItem key={assignee} value={assignee}>
+                    <SelectItem key={assignee} value={assignee || '__unknown__'}>
                       {assignee}
                     </SelectItem>
                   ))}
@@ -455,7 +455,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setFilters({ status: '', category: '', assignedTo: '', dateRange: '' });
+                  setFilters({ status: '__all__', category: '__all__', assignedTo: '__all__', dateRange: '__all__' });
                   setSearchTerm('');
                 }}
                 className="w-full sm:w-auto"
@@ -506,7 +506,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   <div className="flex flex-col items-center">
                     <Clock className="w-12 h-12 text-gray-300 mb-4" />
                     <p className="text-gray-500">
-                      {searchTerm || Object.values(filters).some(f => f) ? 
+                      {searchTerm || Object.values(filters).some(f => f && f !== '__all__') ? 
                         'No tasks match your search criteria' : 
                         'No tasks found'
                       }
@@ -610,7 +610,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
           <div className="flex flex-col items-center py-12">
             <Clock className="w-12 h-12 text-gray-300 mb-4" />
             <p className="text-gray-500 text-center">
-              {searchTerm || Object.values(filters).some(f => f) ? 
+              {searchTerm || Object.values(filters).some(f => f && f !== '__all__') ? 
                 'No tasks match your search criteria' : 
                 'No tasks found'
               }
