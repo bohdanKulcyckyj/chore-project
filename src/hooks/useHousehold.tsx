@@ -188,14 +188,23 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     if (!user) return { error: { message: 'Not authenticated' } };
 
     try {
+      console.log('Attempting to join household with invite code:', inviteCode.trim());
+      
       // Find household by invite code
       const { data: household, error: findError } = await supabase
         .from('households')
         .select()
         .eq('invite_code', inviteCode.trim())
-        .single();
+        .maybeSingle();
 
-      if (findError) throw findError;
+      if (findError) {
+        console.error('Error finding household:', findError);
+        throw findError;
+      }
+
+      if (!household) {
+        throw new Error('Invalid invite code. Please check and try again.');
+      }
 
       // Check if already a member
       const { data: existingMember } = await supabase
