@@ -24,6 +24,7 @@ import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import toast from 'react-hot-toast';
 import CompleteTaskModal from './CompleteTaskModal';
+import TaskDetailModal from './TaskDetailModal';
 import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
 import PendingApprovalAnimation from '../animations/PendingApprovalAnimation';
 import { completeTask, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
@@ -106,6 +107,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   });
   const [showFilters, setShowFilters] = useState(false);
   const [completeModalTask, setCompleteModalTask] = useState<TaskWithAssignment | null>(null);
+  const [detailModalTask, setDetailModalTask] = useState<TaskWithAssignment | null>(null);
   const [celebrationData, setCelebrationData] = useState<{
     visible: boolean;
     result?: TaskCompletionResult;
@@ -167,6 +169,10 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
       return;
     }
     setCompleteModalTask(task);
+  };
+
+  const handleTaskRowClick = (task: TaskWithAssignment) => {
+    setDetailModalTask(task);
   };
 
   const handleCompleteTask = async (completionData: TaskCompletionData) => {
@@ -596,7 +602,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="hover:bg-gray-50"
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleTaskRowClick(assignment)}
                 >
                   <TableCell>
                     <div>
@@ -670,7 +677,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   </TableCell>
                   
                   <TableCell>
-                    <TaskActionsDropdown task={assignment} />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <TaskActionsDropdown task={assignment} />
+                    </div>
                   </TableCell>
                 </motion.tr>
               ))
@@ -698,7 +707,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-gray-50 rounded-xl p-4 border border-gray-200"
+              className="bg-gray-50 rounded-xl p-4 border border-gray-200 cursor-pointer hover:bg-gray-100"
+              onClick={() => handleTaskRowClick(assignment)}
             >
               {/* Task Header */}
               <div className="flex items-start justify-between mb-3">
@@ -777,7 +787,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 </div>
 
                 {/* Task Actions */}
-                <TaskActionsDropdown task={assignment} />
+                <div onClick={(e) => e.stopPropagation()}>
+                  <TaskActionsDropdown task={assignment} />
+                </div>
               </div>
             </motion.div>
           ))
@@ -790,6 +802,17 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         task={completeModalTask}
         onClose={() => setCompleteModalTask(null)}
         onComplete={handleCompleteTask}
+      />
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        isOpen={!!detailModalTask}
+        task={detailModalTask}
+        onClose={() => setDetailModalTask(null)}
+        onClaimTask={handleClaimTask}
+        onMarkComplete={handleMarkComplete}
+        onEditTask={handleEditTask}
+        onReassignTask={handleReassignTask}
       />
 
       {/* Celebration Animation */}

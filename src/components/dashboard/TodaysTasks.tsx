@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tables } from '../../lib/supabase';
+import TaskDetailModal from '../tasks/TaskDetailModal';
 
-type TaskAssignment = Tables<'task_assignments'> & { task: Tables<'tasks'> };
+type TaskAssignment = Tables<'task_assignments'> & { 
+  task: Tables<'tasks'> & {
+    category?: Tables<'task_categories'>;
+  };
+  assigned_user?: Tables<'user_profiles'>;
+};
 
 interface TodaysTasksProps {
   tasks: TaskAssignment[];
@@ -12,6 +18,12 @@ interface TodaysTasksProps {
 }
 
 const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
+  const [detailModalTask, setDetailModalTask] = useState<TaskAssignment | null>(null);
+
+  const handleTaskClick = (task: TaskAssignment) => {
+    setDetailModalTask(task);
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
@@ -68,7 +80,8 @@ const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.7 + index * 0.1 }}
-              className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              onClick={() => handleTaskClick(assignment)}
             >
               <div className="flex-shrink-0">
                 {getStatusIcon(assignment.status)}
@@ -99,7 +112,8 @@ const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     className="px-3 py-1 bg-blue-500 text-white text-xs rounded-full hover:bg-blue-600 transition-colors"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       // Handle start task
                       console.log('Start task:', assignment.id);
                     }}
@@ -112,6 +126,13 @@ const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
           ))
         )}
       </div>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        isOpen={!!detailModalTask}
+        task={detailModalTask}
+        onClose={() => setDetailModalTask(null)}
+      />
     </motion.div>
   );
 };

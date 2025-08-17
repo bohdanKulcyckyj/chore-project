@@ -25,7 +25,10 @@ type TaskAssignment = Tables<'task_assignments'>;
 
 interface DashboardStats {
   personalStats: UserPoints | null;
-  todaysTasks: (TaskAssignment & { task: Tables<'tasks'> })[];
+  todaysTasks: (TaskAssignment & { 
+    task: Tables<'tasks'>;
+    assigned_user?: Tables<'user_profiles'>;
+  })[];
   completedToday: number;
   pendingTasks: number;
   householdRank: number;
@@ -60,16 +63,30 @@ const Dashboard: React.FC = () => {
         .single();
 
       // Fetch today's tasks
-      const today = new Date().toISOString().split('T')[0];
-      const { data: todaysTasks } = await supabase
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+      
+      const { data: assignments } = await supabase
         .from('task_assignments')
         .select(`
           *,
           task:tasks(*)
         `)
         .eq('assigned_to', user.id)
-        .gte('due_date', today)
-        .lt('due_date', today + 'T23:59:59');
+        .gte('due_date', todayStart)
+        .lt('due_date', todayEnd);
+
+      // Fetch user profiles for the household
+      const { data: userProfiles } = await supabase
+        .from('user_profiles')
+        .select('*');
+
+      // Combine the data
+      const todaysTasks = assignments?.map(assignment => ({
+        ...assignment,
+        assigned_user: userProfiles?.find(user => user.id === assignment.assigned_to)
+      })) || [];
 
       // Calculate completed today
       const completedToday = todaysTasks?.filter(t => t.status === 'completed').length || 0;
@@ -86,7 +103,7 @@ const Dashboard: React.FC = () => {
 
       setStats({
         personalStats: personalStats || null,
-        todaysTasks: (todaysTasks as any) || [],
+        todaysTasks: todaysTasks || [],
         completedToday,
         pendingTasks,
         householdRank: userRank,
