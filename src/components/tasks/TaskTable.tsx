@@ -23,6 +23,10 @@ import { format } from 'date-fns';
 import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import toast from 'react-hot-toast';
+import CompleteTaskModal from './CompleteTaskModal';
+import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
+import PendingApprovalAnimation from '../animations/PendingApprovalAnimation';
+import { completeTask, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
 
 // Shadcn UI Components
 import {
@@ -101,6 +105,17 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     direction: 'asc'
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [completeModalTask, setCompleteModalTask] = useState<TaskWithAssignment | null>(null);
+  const [celebrationData, setCelebrationData] = useState<{
+    visible: boolean;
+    result?: TaskCompletionResult;
+    pointsEarned?: number;
+    streakCount?: number;
+  }>({ visible: false });
+  const [pendingApprovalData, setPendingApprovalData] = useState<{
+    visible: boolean;
+    taskName?: string;
+  }>({ visible: false });
 
   const handleClaimTask = async (task: TaskWithAssignment) => {
     if (!user || task.status !== 'unassigned') return;
@@ -146,8 +161,68 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     toast('Reassign task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleMarkComplete = async (_task: TaskWithAssignment) => {
-    toast('Mark complete functionality coming soon!', { icon: '🚧' });
+  const handleMarkComplete = async (task: TaskWithAssignment) => {
+    if (!user || task.assigned_to !== user.id || task.status === 'completed') {
+      toast.error('You cannot complete this task');
+      return;
+    }
+    setCompleteModalTask(task);
+  };
+
+  const handleCompleteTask = async (completionData: TaskCompletionData) => {
+    if (!completeModalTask) return;
+
+    try {
+      const result = await completeTask(completeModalTask.id, completionData);
+      
+      if (result.requiresApproval) {
+        // Show pending approval animation
+        setPendingApprovalData({
+          visible: true,
+          taskName: completeModalTask.task.name
+        });
+      } else {
+        // Get updated streak count for celebration
+        let streakCount = 1;
+        if (user) {
+          const { data: householdData } = await supabase
+            .from('household_members')
+            .select('household_id')
+            .eq('user_id', user.id)
+            .single();
+
+          if (householdData) {
+            const { data: pointsData } = await supabase
+              .from('user_points')
+              .select('current_streak')
+              .eq('user_id', user.id)
+              .eq('household_id', householdData.household_id)
+              .single();
+
+            if (pointsData) {
+              streakCount = pointsData.current_streak;
+            }
+          }
+        }
+        
+        // Show celebration animation
+        setCelebrationData({
+          visible: true,
+          result,
+          pointsEarned: result.points,
+          streakCount
+        });
+      }
+
+      // Refresh task list
+      onTaskUpdate?.();
+      
+      toast.success(result.message);
+    } catch (error) {
+      console.error('Error completing task:', error);
+      toast.error('Failed to complete task');
+      throw error;
+    }
   };
 
   const getFieldValue = (task: TaskWithAssignment, field: string) => {
@@ -708,6 +783,30 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
           ))
         )}
       </div>
+
+      {/* Complete Task Modal */}
+      <CompleteTaskModal
+        isOpen={!!completeModalTask}
+        task={completeModalTask}
+        onClose={() => setCompleteModalTask(null)}
+        onComplete={handleCompleteTask}
+      />
+
+      {/* Celebration Animation */}
+      <TaskCompletionCelebration
+        isVisible={celebrationData.visible}
+        result={celebrationData.result!}
+        pointsEarned={celebrationData.pointsEarned || 0}
+        streakCount={celebrationData.streakCount}
+        onComplete={() => setCelebrationData({ visible: false })}
+      />
+
+      {/* Pending Approval Animation */}
+      <PendingApprovalAnimation
+        isVisible={pendingApprovalData.visible}
+        taskName={pendingApprovalData.taskName || ''}
+        onComplete={() => setPendingApprovalData({ visible: false })}
+      />
     </motion.div>
   );
 };
