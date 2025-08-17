@@ -16,6 +16,7 @@ const InviteHandler: React.FC = () => {
   const { inviteCode } = useParams<{ inviteCode: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
   useEffect(() => {
     if (user && inviteCode) {
@@ -26,7 +27,7 @@ const InviteHandler: React.FC = () => {
 
   // If not logged in, show auth form - invite code will be preserved in URL
   if (!user) {
-    return <AuthForm mode="signin" onModeChange={() => {}} />;
+    return <AuthForm mode={authMode} onModeChange={setAuthMode} />;
   }
 
   return null;
