@@ -96,7 +96,7 @@ const AppContent: React.FC = () => {
       }`}>
         {/* Mobile Header with Hamburger */}
         {isMobile && (
-          <div className="bg-white shadow-sm p-4 flex items-center justify-between md:hidden">
+          <div className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm p-4 flex items-center justify-between md:hidden">
             <button
               onClick={toggleSidebar}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -112,7 +112,7 @@ const AppContent: React.FC = () => {
           </div>
         )}
         
-        <main className="min-h-screen">
+        <main className={`min-h-screen ${isMobile ? 'pt-20' : ''}`}>
           {activeTab === 'dashboard' && <Dashboard />}
           {activeTab === 'tasks' && <TaskManagement />}
           {activeTab === 'approvals' && <Approvals />}

@@ -493,84 +493,174 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
           </p>
         </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50">
-              <TableHead>Task</TableHead>
-              <TableHead>Completed By</TableHead>
-              <TableHead>Completed At</TableHead>
-              <TableHead>Time Spent</TableHead>
-              <TableHead>Points</TableHead>
-              <TableHead className="w-12">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pendingCompletions.map((completion) => (
-              <TableRow 
-                key={completion.id} 
-                className="hover:bg-gray-50 cursor-pointer"
-                onClick={() => setDetailModalCompletion(completion)}>
-                <TableCell>
-                  <div>
-                    <div className="font-medium text-gray-900">
-                      {completion.assignment.task?.name || 'Unknown Task'}
-                    </div>
-                    {completion.assignment.task?.description && (
-                      <div className="text-sm text-gray-500 truncate max-w-xs">
-                        {completion.assignment.task.description}
+        <>
+          {/* Desktop Table */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50">
+                  <TableHead>Task</TableHead>
+                  <TableHead>Completed By</TableHead>
+                  <TableHead>Completed At</TableHead>
+                  <TableHead>Time Spent</TableHead>
+                  <TableHead>Points</TableHead>
+                  <TableHead className="w-12">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingCompletions.map((completion) => (
+                  <TableRow 
+                    key={completion.id} 
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => setDetailModalCompletion(completion)}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {completion.assignment.task?.name || 'Unknown Task'}
+                        </div>
+                        {completion.assignment.task?.description && (
+                          <div className="text-sm text-gray-500 truncate max-w-xs">
+                            {completion.assignment.task.description}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-400 mt-1">
+                          {completion.assignment.task?.difficulty || 'unknown'} difficulty
+                        </div>
                       </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                          <User className="w-3 h-3 text-gray-600" />
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          {completion.completed_user?.display_name || 'Unknown User'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="text-sm">
+                        <div className="text-gray-900">
+                          {format(new Date(completion.completed_at), 'MMM dd, yyyy')}
+                        </div>
+                        <div className="text-gray-500">
+                          {format(new Date(completion.completed_at), 'HH:mm')}
+                        </div>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      {completion.time_spent ? (
+                        <span className="text-gray-600">
+                          {completion.time_spent} min
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <span className="font-medium text-yellow-600">
+                        {completion.assignment.task?.points || 0}
+                      </span>
+                    </TableCell>
+                    
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <ApprovalActionsDropdown completion={completion} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 p-4">
+            {pendingCompletions.map((completion, index) => (
+              <motion.div
+                key={completion.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="bg-gray-50 rounded-xl p-4 border border-gray-200 cursor-pointer hover:bg-gray-100"
+                onClick={() => setDetailModalCompletion(completion)}
+              >
+                {/* Task Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 text-lg">
+                      {completion.assignment.task?.name || 'Unknown Task'}
+                    </h3>
+                    {completion.assignment.task?.description && (
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                        {completion.assignment.task.description}
+                      </p>
                     )}
                     <div className="text-xs text-gray-400 mt-1">
                       {completion.assignment.task?.difficulty || 'unknown'} difficulty
                     </div>
                   </div>
-                </TableCell>
-                
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                      <User className="w-3 h-3 text-gray-600" />
-                    </div>
-                    <span className="font-medium text-gray-900">
+                  
+                  {/* Actions in top right */}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ApprovalActionsDropdown completion={completion} />
+                  </div>
+                </div>
+
+                {/* Completion Details Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  {/* Completed By */}
+                  <div className="flex items-center">
+                    <User className="w-4 h-4 text-gray-400 mr-2" />
+                    <span className="text-sm text-gray-900 truncate">
                       {completion.completed_user?.display_name || 'Unknown User'}
                     </span>
                   </div>
-                </TableCell>
-                
-                <TableCell>
-                  <div className="text-sm">
-                    <div className="text-gray-900">
-                      {format(new Date(completion.completed_at), 'MMM dd, yyyy')}
-                    </div>
-                    <div className="text-gray-500">
-                      {format(new Date(completion.completed_at), 'HH:mm')}
-                    </div>
-                  </div>
-                </TableCell>
-                
-                <TableCell>
-                  {completion.time_spent ? (
-                    <span className="text-gray-600">
-                      {completion.time_spent} min
+
+                  {/* Completed At */}
+                  <div className="flex items-center">
+                    <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                    <span className="text-sm text-gray-900">
+                      {format(new Date(completion.completed_at), 'MMM dd, HH:mm')}
                     </span>
-                  ) : (
-                    <span className="text-gray-400">-</span>
+                  </div>
+
+                  {/* Time Spent */}
+                  <div className="flex items-center">
+                    <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                    <span className="text-sm text-gray-900">
+                      {completion.time_spent ? `${completion.time_spent} min` : 'Not recorded'}
+                    </span>
+                  </div>
+
+                  {/* Points */}
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-yellow-600">
+                      {completion.assignment.task?.points || 0} points
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bottom Row - Notes indicator */}
+                <div className="flex items-center gap-2">
+                  {/* Notes/Attachments indicator */}
+                  {completion.notes && (
+                    <span className="text-xs text-gray-500 bg-blue-50 px-2 py-1 rounded">
+                      Has notes
+                    </span>
                   )}
-                </TableCell>
-                
-                <TableCell>
-                  <span className="font-medium text-yellow-600">
-                    {completion.assignment.task?.points || 0}
-                  </span>
-                </TableCell>
-                
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <ApprovalActionsDropdown completion={completion} />
-                </TableCell>
-              </TableRow>
+                  {completion.proof_urls && completion.proof_urls.length > 0 && (
+                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                      {completion.proof_urls.length} attachment(s)
+                    </span>
+                  )}
+                </div>
+              </motion.div>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+        </>
       )}
 
       {/* Detail Modal */}

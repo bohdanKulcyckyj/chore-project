@@ -247,82 +247,7 @@ const Household: React.FC = () => {
           </h2>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50">
-              <TableHead>Member</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Points</TableHead>
-              <TableHead>Tasks Completed</TableHead>
-              <TableHead>Joined Date</TableHead>
-              <TableHead className="w-12">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((member) => (
-              <TableRow key={member.id} className="hover:bg-gray-50">
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                      <Users className="w-4 h-4 text-gray-600" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {member.user_profile?.display_name || 'Unknown User'}
-                        {member.user_id === user?.id && (
-                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                            You
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </TableCell>
-                
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {member.role === 'admin' ? (
-                      <Shield className="w-4 h-4 text-orange-500" />
-                    ) : (
-                      <Users className="w-4 h-4 text-gray-400" />
-                    )}
-                    <span className={`font-medium ${
-                      member.role === 'admin' ? 'text-orange-700' : 'text-gray-700'
-                    }`}>
-                      {member.role === 'admin' ? 'Administrator' : 'Member'}
-                    </span>
-                  </div>
-                </TableCell>
-                
-                <TableCell>
-                  <span className="font-medium text-gray-900">
-                    {member.user_points?.total_points || 0}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  <span className="text-gray-600">
-                    {member.user_points?.tasks_completed || 0}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  <span className="text-gray-600">
-                    {new Date(member.joined_at).toLocaleDateString()}
-                  </span>
-                </TableCell>
-                
-                <TableCell>
-                  {isAdmin && member.user_id !== user?.id && (
-                    <MemberActionsDropdown member={member} />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-
-        {members.length === 0 && (
+        {members.length === 0 ? (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-medium text-gray-900 mb-1">
@@ -332,7 +257,173 @@ const Household: React.FC = () => {
               Invite people to join your household to get started.
             </p>
           </div>
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead>Member</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Points</TableHead>
+                    <TableHead>Tasks Completed</TableHead>
+                    <TableHead>Joined Date</TableHead>
+                    <TableHead className="w-12">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.map((member) => (
+                    <TableRow key={member.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                            <Users className="w-4 h-4 text-gray-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {member.user_profile?.display_name || 'Unknown User'}
+                              {member.user_id === user?.id && (
+                                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {member.role === 'admin' ? (
+                            <Shield className="w-4 h-4 text-orange-500" />
+                          ) : (
+                            <Users className="w-4 h-4 text-gray-400" />
+                          )}
+                          <span className={`font-medium ${
+                            member.role === 'admin' ? 'text-orange-700' : 'text-gray-700'
+                          }`}>
+                            {member.role === 'admin' ? 'Administrator' : 'Member'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <span className="font-medium text-gray-900">
+                          {member.user_points?.total_points || 0}
+                        </span>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <span className="text-gray-600">
+                          {member.user_points?.tasks_completed || 0}
+                        </span>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <span className="text-gray-600">
+                          {new Date(member.joined_at).toLocaleDateString()}
+                        </span>
+                      </TableCell>
+                      
+                      <TableCell>
+                        {isAdmin && member.user_id !== user?.id && (
+                          <MemberActionsDropdown member={member} />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+          </>
         )}
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4 p-4">
+          {members.map((member, index) => (
+            <motion.div
+              key={member.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="bg-gray-50 rounded-xl p-4 border border-gray-200"
+            >
+              {/* Member Header */}
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                    <Users className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 text-lg">
+                      {member.user_profile?.display_name || 'Unknown User'}
+                    </h3>
+                    {member.user_id === user?.id && (
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                        You
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Actions in top right */}
+                {isAdmin && member.user_id !== user?.id && (
+                  <MemberActionsDropdown member={member} />
+                )}
+              </div>
+
+              {/* Role Badge */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2">
+                  {member.role === 'admin' ? (
+                    <>
+                      <Shield className="w-4 h-4 text-orange-500" />
+                      <span className="font-medium text-orange-700 bg-orange-50 px-2 py-1 rounded-full text-sm">
+                        Administrator
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded-full text-sm">
+                        Member
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Member Stats Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-900">
+                    {member.user_points?.total_points || 0}
+                  </div>
+                  <div className="text-xs text-gray-500">Points</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-900">
+                    {member.user_points?.tasks_completed || 0}
+                  </div>
+                  <div className="text-xs text-gray-500">Tasks</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-sm font-medium text-gray-900">
+                    {new Date(member.joined_at).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-500">Joined</div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </motion.div>
     </div>
   );

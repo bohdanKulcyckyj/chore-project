@@ -717,6 +717,11 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                     {assignment.task.description}
                   </p>
                 </div>
+                
+                {/* Actions in top right */}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <TaskActionsDropdown task={assignment} />
+                </div>
               </div>
 
               {/* Task Details Grid */}
@@ -758,32 +763,25 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 </div>
               </div>
 
-              {/* Bottom Row - Status, Category, Priority, Actions */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Status */}
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                    {assignment.status.replace('_', ' ')}
-                  </span>
-                  
-                  {/* Priority */}
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
-                    {assignment.task.difficulty}
-                  </span>
+              {/* Bottom Row - Status, Category, Priority */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Status */}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
+                  {assignment.status.replace('_', ' ')}
+                </span>
+                
+                {/* Priority */}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
+                  {assignment.task.difficulty}
+                </span>
 
-                  {/* Category */}
-                  {assignment.task.category && (
-                    <Badge variant="secondary">
-                      <Tag className="w-3 h-3 mr-1" />
-                      {assignment.task.category.name}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Task Actions */}
-                <div onClick={(e) => e.stopPropagation()}>
-                  <TaskActionsDropdown task={assignment} />
-                </div>
+                {/* Category */}
+                {assignment.task.category && (
+                  <Badge variant="secondary">
+                    <Tag className="w-3 h-3 mr-1" />
+                    {assignment.task.category.name}
+                  </Badge>
+                )}
               </div>
             </motion.div>
           ))
