@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
 import TaskTable from './TaskTable';
-import TaskTableShadcn from './TaskTableShadcn';
 import AddTaskModal from './AddTaskModal';
 
 type TaskWithAssignment = {
@@ -263,7 +262,7 @@ const TaskManagement: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <TaskTableShadcn 
+        <TaskTable 
           tasks={tasks}
           loading={loading}
           onTaskUpdate={handleTaskUpdate}

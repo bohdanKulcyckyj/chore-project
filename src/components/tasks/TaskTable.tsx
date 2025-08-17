@@ -14,13 +14,41 @@ import {
   Pause,
   SortAsc,
   SortDesc,
-  UserPlus
+  UserPlus,
+  MoreVertical,
+  Edit3,
+  Archive
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import toast from 'react-hot-toast';
-import TaskActionsMenu from './TaskActionsMenu';
+
+// Shadcn UI Components
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 // Types
 type TaskWithAssignment = {
@@ -54,7 +82,7 @@ interface SortState {
   direction: 'asc' | 'desc';
 }
 
-const TaskTable: React.FC<TaskTableProps> = ({ 
+const TaskTableShadcn: React.FC<TaskTableProps> = ({ 
   tasks, 
   loading = false,
   onTaskUpdate 
@@ -63,10 +91,10 @@ const TaskTable: React.FC<TaskTableProps> = ({
   const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<FilterState>({
-    status: '',
-    category: '',
-    assignedTo: '',
-    dateRange: ''
+    status: '__all__',
+    category: '__all__',
+    assignedTo: '__all__',
+    dateRange: '__all__'
   });
   const [sort, setSort] = useState<SortState>({
     field: 'due_date',
@@ -106,23 +134,19 @@ const TaskTable: React.FC<TaskTableProps> = ({
   };
 
   // Placeholder handlers for new actions
-  const handleEditTask = async (task: TaskWithAssignment) => {
-    // TODO: Implement task editing functionality
+  const handleEditTask = async (_task: TaskWithAssignment) => {
     toast('Edit task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleArchiveTask = async (task: TaskWithAssignment) => {
-    // TODO: Implement task archiving functionality
+  const handleArchiveTask = async (_task: TaskWithAssignment) => {
     toast('Archive task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleReassignTask = async (task: TaskWithAssignment) => {
-    // TODO: Implement task reassignment functionality
+  const handleReassignTask = async (_task: TaskWithAssignment) => {
     toast('Reassign task functionality coming soon!', { icon: '🚧' });
   };
 
-  const handleMarkComplete = async (task: TaskWithAssignment) => {
-    // TODO: Implement mark complete functionality
+  const handleMarkComplete = async (_task: TaskWithAssignment) => {
     toast('Mark complete functionality coming soon!', { icon: '🚧' });
   };
 
@@ -156,14 +180,14 @@ const TaskTable: React.FC<TaskTableProps> = ({
 
   // Filter and sort tasks
   const filteredAndSortedTasks = useMemo(() => {
-    let filtered = tasks.filter(task => {
+    const filtered = tasks.filter(task => {
       const matchesSearch = 
         task.task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.task.description.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesStatus = !filters.status || task.status === filters.status;
-      const matchesCategory = !filters.category || task.task.category?.name === filters.category;
-      const matchesAssignee = !filters.assignedTo || 
+      const matchesStatus = !filters.status || filters.status === '__all__' || task.status === filters.status;
+      const matchesCategory = !filters.category || filters.category === '__all__' || task.task.category?.name === filters.category;
+      const matchesAssignee = !filters.assignedTo || filters.assignedTo === '__all__' || 
         (filters.assignedTo === 'Available' && task.status === 'unassigned') ||
         (filters.assignedTo !== 'Available' && task.assigned_user?.display_name === filters.assignedTo);
       
@@ -208,48 +232,113 @@ const TaskTable: React.FC<TaskTableProps> = ({
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return 'default';
       case 'in_progress':
-        return 'bg-blue-100 text-blue-800';
+        return 'default';
       case 'overdue':
-        return 'bg-red-100 text-red-800';
+        return 'destructive';
       case 'skipped':
-        return 'bg-gray-100 text-gray-800';
+        return 'secondary';
       case 'unassigned':
-        return 'bg-purple-100 text-purple-800';
+        return 'outline';
       default:
-        return 'bg-yellow-100 text-yellow-800';
+        return 'secondary';
     }
   };
 
-  const getDifficultyColor = (difficulty: string) => {
+  const getDifficultyVariant = (difficulty: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (difficulty) {
       case 'easy':
-        return 'bg-green-100 text-green-800';
+        return 'default';
       case 'medium':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'secondary';
       case 'hard':
-        return 'bg-red-100 text-red-800';
+        return 'destructive';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'outline';
     }
   };
 
   const SortButton: React.FC<{ field: string; children: React.ReactNode }> = ({ field, children }) => (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={() => handleSort(field)}
-      className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+      className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground"
     >
-      {children}
-      {sort.field === field && (
-        sort.direction === 'asc' ? 
-          <SortAsc className="w-4 h-4" /> : 
-          <SortDesc className="w-4 h-4" />
-      )}
-    </button>
+      <span className="flex items-center gap-1">
+        {children}
+        {sort.field === field && (
+          sort.direction === 'asc' ? 
+            <SortAsc className="w-4 h-4" /> : 
+            <SortDesc className="w-4 h-4" />
+        )}
+      </span>
+    </Button>
+  );
+
+  const TaskActionsDropdown: React.FC<{ task: TaskWithAssignment }> = ({ task }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button 
+          variant="ghost" 
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={claimingTaskId === task.id}
+        >
+          <MoreVertical className="h-4 w-4" />
+          <span className="sr-only">Open menu</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {task.status === 'unassigned' ? (
+          <>
+            <DropdownMenuItem onClick={() => handleClaimTask(task)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Claim Task
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleEditTask(task)}>
+              <Edit3 className="mr-2 h-4 w-4" />
+              Edit Task
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => handleArchiveTask(task)}
+              className="text-destructive"
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Archive Task
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            {task.status !== 'completed' && (
+              <DropdownMenuItem onClick={() => handleMarkComplete(task)}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Mark Complete
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => handleEditTask(task)}>
+              <Edit3 className="mr-2 h-4 w-4" />
+              Edit Assignment
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleReassignTask(task)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Reassign Task
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => handleArchiveTask(task)}
+              className="text-destructive"
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Archive Task
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   if (loading) {
@@ -282,24 +371,24 @@ const TaskTable: React.FC<TaskTableProps> = ({
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
+              <Input
                 type="text"
                 placeholder="Search tasks..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full md:w-64"
+                className="pl-10 w-full md:w-64"
               />
             </div>
             
             {/* Filter Toggle */}
-            <button
+            <Button
+              variant="outline"
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             >
-              <Filter className="w-4 h-4" />
+              <Filter className="w-4 h-4 mr-2" />
               Filters
-              <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
+              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </Button>
           </div>
         </div>
 
@@ -313,62 +402,66 @@ const TaskTable: React.FC<TaskTableProps> = ({
           >
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Statuses</option>
-                {filterOptions.statuses.map(status => (
-                  <option key={status} value={status}>
-                    {status.replace('_', ' ').toUpperCase()}
-                  </option>
-                ))}
-              </select>
+              <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Statuses</SelectItem>
+                  {filterOptions.statuses.map(status => (
+                    <SelectItem key={status} value={status}>
+                      {status.replace('_', ' ').toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select
-                value={filters.category}
-                onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Categories</option>
-                {filterOptions.categories.map(category => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
+              <Select value={filters.category} onValueChange={(value) => setFilters(prev => ({ ...prev, category: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Categories</SelectItem>
+                  {filterOptions.categories.map(category => (
+                    <SelectItem key={category} value={category || '__unknown__'}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
-              <select
-                value={filters.assignedTo}
-                onChange={(e) => setFilters(prev => ({ ...prev, assignedTo: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Members</option>
-                {filterOptions.assignees.map(assignee => (
-                  <option key={assignee} value={assignee}>
-                    {assignee}
-                  </option>
-                ))}
-              </select>
+              <Select value={filters.assignedTo} onValueChange={(value) => setFilters(prev => ({ ...prev, assignedTo: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Members" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Members</SelectItem>
+                  {filterOptions.assignees.map(assignee => (
+                    <SelectItem key={assignee} value={assignee || '__unknown__'}>
+                      {assignee}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="sm:col-span-2 lg:col-span-1 flex items-end">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => {
-                  setFilters({ status: '', category: '', assignedTo: '', dateRange: '' });
+                  setFilters({ status: '__all__', category: '__all__', assignedTo: '__all__', dateRange: '__all__' });
                   setSearchTerm('');
                 }}
-                className="w-full sm:w-auto px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="w-full sm:w-auto"
               >
                 Clear All
-              </button>
+              </Button>
             </div>
           </motion.div>
         )}
@@ -382,51 +475,45 @@ const TaskTable: React.FC<TaskTableProps> = ({
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
                 <SortButton field="name">Task</SortButton>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Assigned To
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              </TableHead>
+              <TableHead>Assigned To</TableHead>
+              <TableHead>
                 <SortButton field="due_date">Due Date</SortButton>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Category
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              </TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>
                 <SortButton field="priority">Priority</SortButton>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              </TableHead>
+              <TableHead>
                 <SortButton field="status">Status</SortButton>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              </TableHead>
+              <TableHead>
                 <SortButton field="points">Points</SortButton>
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+              </TableHead>
+              <TableHead className="w-12">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {filteredAndSortedTasks.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-6 py-12 text-center">
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-12">
                   <div className="flex flex-col items-center">
                     <Clock className="w-12 h-12 text-gray-300 mb-4" />
                     <p className="text-gray-500">
-                      {searchTerm || Object.values(filters).some(f => f) ? 
+                      {searchTerm || Object.values(filters).some(f => f && f !== '__all__') ? 
                         'No tasks match your search criteria' : 
                         'No tasks found'
                       }
                     </p>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               filteredAndSortedTasks.map((assignment, index) => (
                 <motion.tr
@@ -434,9 +521,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="hover:bg-gray-50 transition-colors"
+                  className="hover:bg-gray-50"
                 >
-                  <td className="px-6 py-4">
+                  <TableCell>
                     <div>
                       <div className="font-medium text-gray-900">{assignment.task.name}</div>
                       <div className="text-sm text-gray-500 truncate max-w-xs">
@@ -446,9 +533,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
                         {assignment.task.estimated_duration} min
                       </div>
                     </div>
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
+                  <TableCell>
                     <div className="flex items-center">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
                         assignment.status === 'unassigned' ? 'bg-purple-100' : 'bg-blue-100'
@@ -461,9 +548,9 @@ const TaskTable: React.FC<TaskTableProps> = ({
                         {assignment.status === 'unassigned' ? 'Available' : (assignment.assigned_user?.display_name || 'Unknown')}
                       </span>
                     </div>
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
+                  <TableCell>
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-900">
@@ -473,65 +560,57 @@ const TaskTable: React.FC<TaskTableProps> = ({
                         }
                       </span>
                     </div>
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
+                  <TableCell>
                     {assignment.task.category ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <Badge variant="secondary">
                         <Tag className="w-3 h-3 mr-1" />
                         {assignment.task.category.name}
-                      </span>
+                      </Badge>
                     ) : (
                       <span className="text-gray-400 text-sm">No category</span>
                     )}
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getDifficultyColor(assignment.task.difficulty)}`}>
+                  <TableCell>
+                    <Badge variant={getDifficultyVariant(assignment.task.difficulty)}>
                       {assignment.task.difficulty}
-                    </span>
-                  </td>
+                    </Badge>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
+                  <TableCell>
                     <div className="flex items-center">
                       {getStatusIcon(assignment.status)}
-                      <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(assignment.status)}`}>
+                      <Badge variant={getStatusVariant(assignment.status)} className="ml-2">
                         {assignment.status.replace('_', ' ')}
-                      </span>
+                      </Badge>
                     </div>
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-6 py-4">
+                  <TableCell>
                     <span className="text-sm font-medium text-gray-900">
                       {assignment.task.points}
                     </span>
-                  </td>
+                  </TableCell>
                   
-                  <td className="px-4 py-4 text-center w-24">
-                    <TaskActionsMenu
-                      task={assignment}
-                      onClaimTask={handleClaimTask}
-                      onEditTask={handleEditTask}
-                      onArchiveTask={handleArchiveTask}
-                      onReassignTask={handleReassignTask}
-                      onMarkComplete={handleMarkComplete}
-                      isLoading={claimingTaskId === assignment.id}
-                    />
-                  </td>
+                  <TableCell>
+                    <TaskActionsDropdown task={assignment} />
+                  </TableCell>
                 </motion.tr>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
-      {/* Mobile Card View */}
+      {/* Mobile Card View - keeping the existing implementation for now */}
       <div className="md:hidden space-y-4 p-4">
         {filteredAndSortedTasks.length === 0 ? (
           <div className="flex flex-col items-center py-12">
             <Clock className="w-12 h-12 text-gray-300 mb-4" />
             <p className="text-gray-500 text-center">
-              {searchTerm || Object.values(filters).some(f => f) ? 
+              {searchTerm || Object.values(filters).some(f => f && f !== '__all__') ? 
                 'No tasks match your search criteria' : 
                 'No tasks found'
               }
@@ -604,36 +683,26 @@ const TaskTable: React.FC<TaskTableProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Status */}
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(assignment.status)}`}>
+                  <Badge variant={getStatusVariant(assignment.status)}>
                     {assignment.status.replace('_', ' ')}
-                  </span>
+                  </Badge>
                   
                   {/* Priority */}
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(assignment.task.difficulty)}`}>
+                  <Badge variant={getDifficultyVariant(assignment.task.difficulty)}>
                     {assignment.task.difficulty}
-                  </span>
+                  </Badge>
 
                   {/* Category */}
                   {assignment.task.category && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <Badge variant="secondary">
                       <Tag className="w-3 h-3 mr-1" />
                       {assignment.task.category.name}
-                    </span>
+                    </Badge>
                   )}
                 </div>
 
                 {/* Task Actions */}
-                <div className="flex justify-center">
-                  <TaskActionsMenu
-                    task={assignment}
-                    onClaimTask={handleClaimTask}
-                    onEditTask={handleEditTask}
-                    onArchiveTask={handleArchiveTask}
-                    onReassignTask={handleReassignTask}
-                    onMarkComplete={handleMarkComplete}
-                    isLoading={claimingTaskId === assignment.id}
-                  />
-                </div>
+                <TaskActionsDropdown task={assignment} />
               </div>
             </motion.div>
           ))
@@ -643,4 +712,4 @@ const TaskTable: React.FC<TaskTableProps> = ({
   );
 };
 
-export default TaskTable;
+export default TaskTableShadcn;
