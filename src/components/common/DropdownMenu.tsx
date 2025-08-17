@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { createPortal } from 'react-dom';
+import React from 'react';
+import { Menu, MenuButton, MenuItems, MenuItem, Transition } from '@headlessui/react';
+import { Fragment } from 'react';
 
 export interface DropdownMenuItem {
   id: string;
@@ -24,166 +24,57 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   align = 'right',
   className = ''
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscapeKey);
-      window.addEventListener('scroll', updatePosition, true);
-      window.addEventListener('resize', updatePosition);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscapeKey);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [isOpen]);
-
-  const handleItemClick = (item: DropdownMenuItem) => {
-    if (!item.disabled) {
-      item.onClick();
-      setIsOpen(false);
-    }
-  };
-
-  const updatePosition = () => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const dropdownWidth = 160; // min-w-40 = 160px
-      const dropdownHeight = items.length * 40 + 8; // Approximate height (40px per item + padding)
-      const gap = 4;
-      const margin = 8;
-      
-      // Calculate horizontal position
-      let left = align === 'right' 
-        ? rect.right + window.scrollX - dropdownWidth
-        : rect.left + window.scrollX;
-      
-      // Adjust if dropdown would go off-screen horizontally
-      if (left + dropdownWidth > window.innerWidth + window.scrollX) {
-        left = window.innerWidth + window.scrollX - dropdownWidth - margin;
-      }
-      if (left < window.scrollX + margin) {
-        left = window.scrollX + margin;
-      }
-      
-      // Calculate vertical position - this is the key fix
-      let top;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      
-      // Check if there's enough space below for the dropdown
-      if (spaceBelow >= dropdownHeight + gap + margin) {
-        // Position below
-        top = rect.bottom + window.scrollY + gap;
-      } else if (spaceAbove >= dropdownHeight + gap + margin) {
-        // Position above
-        top = rect.top + window.scrollY - dropdownHeight - gap;
-      } else {
-        // Not enough space in either direction, position for best fit
-        if (spaceBelow > spaceAbove) {
-          // More space below, position at bottom of viewport
-          top = window.innerHeight + window.scrollY - dropdownHeight - margin;
-        } else {
-          // More space above, position at top of viewport
-          top = window.scrollY + margin;
-        }
-      }
-      
-      setPosition({ top, left });
-    }
-  };
-
-  const handleTriggerClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isOpen) {
-      updatePosition();
-    }
-    setIsOpen(!isOpen);
-  };
-
   return (
-    <div className={`relative inline-block ${className}`}>
-      {/* Trigger Button */}
-      <button
-        ref={triggerRef}
-        onClick={handleTriggerClick}
-        className="flex items-center justify-center p-1 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-        aria-haspopup="true"
-        aria-expanded={isOpen}
-      >
+    <Menu as="div" className={`relative inline-block ${className}`}>
+      <MenuButton className="flex items-center justify-center p-1 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
         {trigger}
-      </button>
+      </MenuButton>
 
-      {/* Dropdown Menu - Rendered in Portal */}
-      {isOpen && createPortal(
-        <AnimatePresence>
-          <motion.div
-            ref={dropdownRef}
-            initial={{ opacity: 0, scale: 0.95, y: -5 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -5 }}
-            transition={{ duration: 0.15 }}
-            className="fixed z-[9999] min-w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
-            style={{
-              top: position.top,
-              left: position.left
-            }}
-            role="menu"
-            aria-orientation="vertical"
-          >
-            {items.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => handleItemClick(item)}
-                disabled={item.disabled}
-                className={`
-                  w-full flex items-center px-4 py-2 text-sm text-left transition-colors
-                  ${item.disabled 
-                    ? 'text-gray-400 cursor-not-allowed' 
-                    : item.variant === 'danger'
-                      ? 'text-red-700 hover:bg-red-50 hover:text-red-800'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }
-                `}
-                role="menuitem"
-              >
-                {item.icon && (
-                  <span className="mr-3 flex-shrink-0">
-                    {item.icon}
-                  </span>
-                )}
-                {item.label}
-              </button>
-            ))}
-          </motion.div>
-        </AnimatePresence>,
-        document.body
-      )}
-    </div>
+      <Transition
+        as={Fragment}
+        enter="transition ease-out duration-100"
+        enterFrom="transform opacity-0 scale-95"
+        enterTo="transform opacity-100 scale-100"
+        leave="transition ease-in duration-75"
+        leaveFrom="transform opacity-100 scale-100"
+        leaveTo="transform opacity-0 scale-95"
+      >
+        <MenuItems className={`absolute z-50 bottom-full mb-1 min-w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 focus:outline-none ${
+          align === 'right' ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
+        }`}>
+          {items.map((item) => (
+            <MenuItem key={item.id} disabled={item.disabled}>
+              {({ focus }) => (
+                <button
+                  onClick={item.onClick}
+                  disabled={item.disabled}
+                  className={`
+                    w-full flex items-center px-4 py-2 text-sm text-left transition-colors
+                    ${item.disabled 
+                      ? 'text-gray-400 cursor-not-allowed' 
+                      : item.variant === 'danger'
+                        ? focus 
+                          ? 'bg-red-50 text-red-800' 
+                          : 'text-red-700'
+                        : focus 
+                          ? 'bg-gray-50 text-gray-900' 
+                          : 'text-gray-700'
+                    }
+                  `}
+                >
+                  {item.icon && (
+                    <span className="mr-3 flex-shrink-0">
+                      {item.icon}
+                    </span>
+                  )}
+                  {item.label}
+                </button>
+              )}
+            </MenuItem>
+          ))}
+        </MenuItems>
+      </Transition>
+    </Menu>
   );
 };
 
