@@ -134,7 +134,7 @@ export interface Database {
           id: string;
           task_id: string;
           assigned_to: string;
-          due_date: string | null;
+          due_datetime: string | null;
           assigned_at: string;
           assigned_by: string | null;
           status: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'skipped';
@@ -143,7 +143,7 @@ export interface Database {
           id?: string;
           task_id: string;
           assigned_to: string;
-          due_date?: string | null;
+          due_datetime?: string | null;
           assigned_at?: string;
           assigned_by?: string | null;
           status?: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'skipped';
@@ -152,7 +152,7 @@ export interface Database {
           id?: string;
           task_id?: string;
           assigned_to?: string;
-          due_date?: string | null;
+          due_datetime?: string | null;
           assigned_at?: string;
           assigned_by?: string | null;
           status?: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'skipped';

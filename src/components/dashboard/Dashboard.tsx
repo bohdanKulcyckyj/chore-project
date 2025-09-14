@@ -74,8 +74,8 @@ const Dashboard: React.FC = () => {
           task:tasks(*)
         `)
         .eq('assigned_to', user.id)
-        .gte('due_date', todayStart)
-        .lt('due_date', todayEnd);
+        .gte('due_datetime', todayStart)
+        .lt('due_datetime', todayEnd);
 
       // Fetch user profiles for the household
       const { data: userProfiles } = await supabase
