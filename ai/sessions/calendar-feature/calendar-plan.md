@@ -1,18 +1,22 @@
 # Calendar Feature Implementation - Master Plan
 
-**Date:** 2025-09-14
+**Date:** 2025-09-14 (Updated: 2025-09-17)
 **Feature:** Google Calendar-style task calendar for household task management
-**Status:** Phase 1 ✅ Database Foundation | Phase 2 ✅ React Hooks | Ready for Phase 3
+**Status:** Phase 1 ✅ Database Foundation | Phase 2 ✅ React Hooks | **UPDATED: Phase 3 FullCalendar Integration**
+
+## IMPORTANT UPDATE: FullCalendar Integration Approach
+
+**Decision Made:** Switch from custom calendar components to **FullCalendar React** integration for better reliability, maintenance, and feature completeness.
 
 ## Subsession Documents
 
 This master plan is broken down into focused implementation sessions:
 
-1. **`01-database-migration.md`** - Database schema changes for datetime support
-2. **`02-hooks-implementation.md`** - Custom React hooks for state management
-3. **`03-views-implementation.md`** - Day, Week, Month view components
-4. **`04-components-integration.md`** - Main Calendar component and integration
-5. **`05-task-sorting-strategy.md`** - Advanced task sorting by start time
+1. **`01-database-migration.md`** - Database schema changes for datetime support ✅
+2. **`02-hooks-implementation.md`** - Custom React hooks for state management ✅
+3. **`03-fullcalendar-implementation.md`** - FullCalendar React integration (UPDATED)
+4. **`04-components-integration.md`** - Calendar filters, controls and modal integration
+5. **`05-task-sorting-strategy.md`** - Advanced task sorting and conflict detection
 
 ## Objective
 
@@ -128,28 +132,35 @@ One of the most important features of the calendar is handling **multiple tasks 
 - Easy access to overflow tasks without cluttering the interface
 - Visual conflict warnings help prevent impossible scheduling
 
-## Component Architecture Design
+## FullCalendar Component Architecture
 
-### 1. Calendar Container Component
+### 1. FullCalendar Integration Structure
 ```
 src/components/calendar/
-├── Calendar.tsx              # Main calendar component
-├── CalendarHeader.tsx        # Navigation & view controls
-├── CalendarFilters.tsx       # Member/status/category filters
-├── views/
-│   ├── DayView.tsx          # Single day with hour slots
-│   ├── WeekView.tsx         # 7-day week grid
-│   └── MonthView.tsx        # Monthly calendar grid
+├── Calendar.tsx                    # Main FullCalendar wrapper component
+├── CalendarHeader.tsx             # Custom navigation & view controls
+├── CalendarFilters.tsx            # Member/status/category filters
 ├── components/
-│   ├── TaskBlock.tsx        # Individual task display
-│   ├── TimeSlot.tsx         # Time slot container
-│   ├── TaskTooltip.tsx      # Hover details
-│   └── QuickActions.tsx     # Status update buttons
+│   ├── CustomEventContent.tsx     # Custom task event rendering
+│   ├── CustomDayHeaderContent.tsx # Custom day header
+│   ├── TaskTooltip.tsx           # Hover details
+│   └── EventModal.tsx            # Task detail modal
+├── plugins/
+│   ├── calendarPlugins.ts        # FullCalendar plugin configuration
+│   └── customViews.ts            # Custom view definitions if needed
 └── hooks/
-    ├── useCalendarData.tsx   # Fetch & filter calendar data
-    ├── useCalendarView.tsx   # View state management
-    └── useTaskActions.tsx    # Task interaction handlers
+    ├── useCalendarData.tsx        # Fetch & filter calendar data (existing)
+    ├── useCalendarView.tsx        # View state management (existing)
+    ├── useTaskActions.tsx         # Task interaction handlers (existing)
+    └── useFullCalendarEvents.tsx  # Convert tasks to FullCalendar events
 ```
+
+### 2. FullCalendar Integration Benefits
+- **Plugin Architecture**: Use only needed features (dayGrid, timeGrid, interaction)
+- **Custom Rendering**: React components for events, headers, and tooltips
+- **Performance**: Optimized rendering with PureComponent patterns
+- **TypeScript**: Full type safety with comprehensive definitions
+- **React Compatibility**: Supports React 16.7+ through React 19
 
 ### 2. Data Flow Architecture
 
