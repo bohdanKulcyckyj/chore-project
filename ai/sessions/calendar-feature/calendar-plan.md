@@ -141,26 +141,24 @@ src/components/calendar/
 ├── CalendarHeader.tsx             # Custom navigation & view controls
 ├── CalendarFilters.tsx            # Member/status/category filters
 ├── components/
-│   ├── CustomEventContent.tsx     # Custom task event rendering
-│   ├── CustomDayHeaderContent.tsx # Custom day header
-│   ├── TaskTooltip.tsx           # Hover details
-│   └── EventModal.tsx            # Task detail modal
-├── plugins/
-│   ├── calendarPlugins.ts        # FullCalendar plugin configuration
-│   └── customViews.ts            # Custom view definitions if needed
+│   └── CustomEventContent.tsx     # Custom task event rendering
 └── hooks/
-    ├── useCalendarData.tsx        # Fetch & filter calendar data (existing)
-    ├── useCalendarView.tsx        # View state management (existing)
-    ├── useTaskActions.tsx         # Task interaction handlers (existing)
-    └── useFullCalendarEvents.tsx  # Convert tasks to FullCalendar events
+    ├── useCalendarData.tsx        # Fetch & filter calendar data ✅ (existing)
+    ├── useCalendarView.tsx        # View state management ✅ (existing)
+    ├── useTaskActions.tsx         # Task interaction handlers ✅ (existing)
+    ├── useFullCalendarEvents.tsx  # Convert tasks to FullCalendar events
+    └── calendarUtils.ts           # Date/time utilities ✅ (existing)
 ```
 
 ### 2. FullCalendar Integration Benefits
 - **Plugin Architecture**: Use only needed features (dayGrid, timeGrid, interaction)
-- **Custom Rendering**: React components for events, headers, and tooltips
-- **Performance**: Optimized rendering with PureComponent patterns
+- **Built-in Overflow**: Native `dayMaxEvents` + `moreLinkClick` handling
+- **React Portals**: Custom event content preserves React context automatically
+- **Performance**: Optimized rendering, no custom virtualization needed
 - **TypeScript**: Full type safety with comprehensive definitions
 - **React Compatibility**: Supports React 16.7+ through React 19
+- **Accessibility**: Built-in keyboard navigation and screen reader support
+- **Mobile**: Touch gestures and responsive design out of the box
 
 ### 2. Data Flow Architecture
 
@@ -303,31 +301,31 @@ const getCalendarTasks = async (
 - Full error handling and optimistic UI updates
 - Files created: `useCalendarView.tsx`, `useCalendarData.tsx`, `useTaskActions.tsx`, `calendarUtils.ts`
 
-### Phase 3: Calendar Views with Multiple Task Support (`03-views-implementation.md`)
-- [ ] Create `TaskBlock` component with day/week/month variants and stacking support
-- [ ] Create `TimeSlot` component with **multiple task stacking capabilities**
-- [ ] Create `TaskOverflowModal` for showing additional tasks beyond visible limit
-- [ ] Implement `DayView` with 24-hour time slots (max 3 tasks per slot + overflow)
-- [ ] Implement `WeekView` with 7-day grid (max 2 tasks per cell + overflow)
-- [ ] Implement `MonthView` with calendar grid (3-4 task indicators + overflow count)
-- [ ] Add **task stacking strategies**: vertical, overlapping, compressed, grouped
-- [ ] Add responsive breakpoints with different stacking limits for mobile/desktop
+### Phase 3: FullCalendar Integration (`03-fullcalendar-implementation.md`) 🔄 **IN PROGRESS**
+- [ ] Install FullCalendar React dependencies (`@fullcalendar/react`, `@fullcalendar/core`, plugins)
+- [ ] Create `useFullCalendarEvents` hook to transform tasks to FullCalendar events
+- [ ] Implement main `Calendar` component with FullCalendar integration
+- [ ] Create `CustomEventContent` component for task rendering (preserves React context)
+- [ ] Build `CalendarHeader` with navigation and view switching
+- [ ] Update `CalendarFilters` to work with FullCalendar event filtering
+- [ ] Add custom CSS styling to match app theme
+- [ ] Test **built-in overflow handling** (`dayMaxEvents` + `moreLinkClick`)
 
-### Phase 4: Main Integration (`04-components-integration.md`)
-- [ ] Create main `Calendar` component with view orchestration
-- [ ] Implement `CalendarHeader` with navigation and view controls
-- [ ] Implement `CalendarFilters` with member/status/category filtering
+### Phase 4: Component Integration & Polish (`04-components-integration.md`)
 - [ ] Integrate existing `TaskDetailModal` from task management
-- [ ] Add loading states and error handling
-- [ ] Update `App.tsx` to use new Calendar component
+- [ ] Add loading states and error handling for FullCalendar
+- [ ] Implement real-time event updates via Supabase subscriptions
+- [ ] Add responsive behavior and mobile optimizations
+- [ ] Update `App.tsx` to use new FullCalendar component
+- [ ] Test all three views (day/week/month) with sample data
 
 ### Phase 5: Advanced Features (`05-task-sorting-strategy.md`)
-- [ ] Implement start time calculation (due_datetime - duration)
-- [ ] Create advanced sorting algorithms (start time, due time, priority)
-- [ ] Add time conflict detection and visualization
-- [ ] Create duration-based task block sizing
-- [ ] Add sorting method toggle controls
-- [ ] Implement conflict warnings and visual indicators
+- [ ] Implement advanced event ordering (`eventOrder` configuration)
+- [ ] Add time conflict detection using FullCalendar's conflict handling
+- [ ] Create duration-based event display with `start`/`end` times
+- [ ] Add task status-based styling and priority sorting
+- [ ] Implement drag-and-drop rescheduling (future enhancement)
+- [ ] Add calendar export/sync capabilities (future enhancement)
 
 ## Technical Considerations
 
