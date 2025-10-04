@@ -28,7 +28,7 @@ type TaskWithAssignment = {
   };
   assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
-  due_date?: string;
+  due_datetime?: string;
   status: string;
   assigned_at?: string;
   assigned_by?: string;
@@ -197,13 +197,13 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         </span>
                       </div>
                       
-                      {task.due_date && (
+                      {task.due_datetime && (
                         <div className="flex items-center justify-between">
                           <span className="text-gray-600">Due date:</span>
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-400" />
                             <span className="font-medium text-gray-900">
-                              {format(new Date(task.due_date), 'MMM dd, yyyy h:mm a')}
+                              {format(new Date(task.due_datetime), 'MMM dd, yyyy h:mm a')}
                             </span>
                           </div>
                         </div>

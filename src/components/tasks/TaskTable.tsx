@@ -62,7 +62,7 @@ type TaskWithAssignment = {
   };
   assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
-  due_date?: string;
+  due_datetime?: string;
   status: string;
   assigned_at?: string;
   assigned_by?: string;
@@ -101,7 +101,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     dateRange: '__all__'
   });
   const [sort, setSort] = useState<SortState>({
-    field: 'due_date',
+    field: 'due_datetime',
     direction: 'asc'
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -132,7 +132,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         .insert({
           task_id: taskId,
           assigned_to: user.id,
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Default 7 days from now
+          due_datetime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Default 7 days from now
           assigned_by: user.id,
           status: 'pending',
         });
@@ -234,8 +234,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     switch (field) {
       case 'name':
         return task.task.name.toLowerCase();
-      case 'due_date':
-        return task.due_date ? new Date(task.due_date).getTime() : 0;
+      case 'due_datetime':
+        return task.due_datetime ? new Date(task.due_datetime).getTime() : 0;
       case 'priority':
         return task.task.difficulty;
       case 'status':
@@ -565,7 +565,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               </TableHead>
               <TableHead>Assigned To</TableHead>
               <TableHead>
-                <SortButton field="due_date">Due Date</SortButton>
+                <SortButton field="due_datetime">Due Date</SortButton>
               </TableHead>
               <TableHead>Category</TableHead>
               <TableHead>
@@ -636,8 +636,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-900">
-                        {assignment.due_date ? 
-                          format(new Date(assignment.due_date), 'MMM dd, yyyy') : 
+                        {assignment.due_datetime ?
+                          format(new Date(assignment.due_datetime), 'MMM dd, yyyy') :
                           'No due date'
                         }
                       </span>
@@ -740,8 +740,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 <div className="flex items-center">
                   <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                   <span className="text-sm text-gray-900">
-                    {assignment.due_date ? 
-                      format(new Date(assignment.due_date), 'MMM dd') : 
+                    {assignment.due_datetime ?
+                      format(new Date(assignment.due_datetime), 'MMM dd') :
                       'No due date'
                     }
                   </span>
