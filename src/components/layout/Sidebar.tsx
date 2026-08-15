@@ -11,8 +11,8 @@ import {
   Star,
   X,
   Shield,
-  UserPlus,
-  Clock
+  Clock,
+  Wallet
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
@@ -39,6 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'text-blue-500' },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare, color: 'text-emerald-500' },
     { id: 'calendar', label: 'Calendar', icon: Calendar, color: 'text-purple-500' },
+    { id: 'budget', label: 'Budget', icon: Wallet, color: 'text-teal-500' },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, color: 'text-yellow-500' },
     { id: 'household', label: 'Household', icon: Users, color: 'text-pink-500' },
   ];

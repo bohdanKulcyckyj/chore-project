@@ -342,6 +342,76 @@ export interface Database {
           created_at?: string;
         };
       };
+      purchases: {
+        Row: {
+          id: string;
+          household_id: string;
+          shop_name: string;
+          purchased_at: string;
+          paid_by: string;
+          total_amount: number;
+          receipt_url: string | null;
+          task_completion_id: string | null;
+          settled_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          shop_name?: string;
+          purchased_at?: string;
+          paid_by: string;
+          total_amount?: number;
+          receipt_url?: string | null;
+          task_completion_id?: string | null;
+          settled_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          shop_name?: string;
+          purchased_at?: string;
+          paid_by?: string;
+          total_amount?: number;
+          receipt_url?: string | null;
+          task_completion_id?: string | null;
+          settled_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      purchase_items: {
+        Row: {
+          id: string;
+          purchase_id: string;
+          name: string;
+          quantity: number;
+          unit_price: number | null;
+          total_price: number;
+          owner_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          purchase_id: string;
+          name: string;
+          quantity?: number;
+          unit_price?: number | null;
+          total_price: number;
+          owner_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          purchase_id?: string;
+          name?: string;
+          quantity?: number;
+          unit_price?: number | null;
+          total_price?: number;
+          owner_id?: string | null;
+        };
+      };
       user_profiles: {
         Row: {
           id: string;

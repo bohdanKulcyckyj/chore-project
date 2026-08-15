@@ -1,0 +1,7 @@
+- [ ] Budget tab (teal wallet icon) appears in sidebar and opens the Budget page with an empty state
+- [ ] Add a purchase with items assigned to Me / other member / Shared → card shows shop, CZK total, "Paid by", and per-owner breakdown under the correct date
+- [ ] "Split row" button turns one item into two rows with halved qty/price; "Assign all to" sets every row's owner
+- [ ] Enter a receipt total that differs from the items sum → amber warning shows, purchase still saves
+- [ ] Attach a PDF when saving → receipt icon appears on the card and opens the file in a new tab
+- [ ] Edit an existing purchase (change an item, price, owner) → changes persist after reload; delete removes the card
+- [ ] Sign in as the second household member → the purchase is visible and its receipt opens
