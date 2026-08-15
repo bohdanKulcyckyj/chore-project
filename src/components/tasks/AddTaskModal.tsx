@@ -31,7 +31,7 @@ interface FormData {
   description: string;
   category_id: string;
   assigned_to: string; // Empty string means unassigned
-  due_date: string;
+  due_datetime: string;
   difficulty: 'easy' | 'medium' | 'hard';
   estimated_duration: number;
   points: number;
@@ -49,7 +49,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     description: '',
     category_id: '',
     assigned_to: '',
-    due_date: '',
+    due_datetime: '',
     difficulty: 'medium',
     estimated_duration: 30,
     points: 10,
@@ -67,7 +67,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
         description: '',
         category_id: '',
         assigned_to: '',
-        due_date: '',
+        due_datetime: '',
         difficulty: 'medium',
         estimated_duration: 30,
         points: 10,
@@ -101,12 +101,12 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     if (formData.name.trim().length < 3) return 'Task name must be at least 3 characters';
     if (!formData.category_id) return 'Please select a category';
     // Assignment is now optional - removed assigned_to validation
-    if (!formData.due_date) return 'Please set a due date';
+    if (!formData.due_datetime) return 'Please set a due date';
     if (formData.estimated_duration <= 0) return 'Duration must be greater than 0';
     if (formData.points <= 0) return 'Points must be greater than 0';
     
     // Check if due date is in the future
-    const dueDate = new Date(formData.due_date);
+    const dueDate = new Date(formData.due_datetime);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (dueDate < today) return 'Due date must be today or in the future';
@@ -161,7 +161,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
           .insert({
             task_id: task.id,
             assigned_to: formData.assigned_to,
-            due_date: formData.due_date,
+            due_datetime: formData.due_datetime,
             assigned_by: user.id,
             status: 'pending',
           });
@@ -198,8 +198,6 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     }
   };
 
-  // Get today's date in YYYY-MM-DD format for min date
-  const today = new Date().toISOString().split('T')[0];
 
   return (
     <AnimatePresence>
@@ -322,10 +320,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                         Due Date *
                       </label>
                       <input
-                        type="date"
-                        value={formData.due_date}
-                        onChange={(e) => handleInputChange('due_date', e.target.value)}
-                        min={today}
+                        type="datetime-local"
+                        value={formData.due_datetime}
+                        onChange={(e) => handleInputChange('due_datetime', e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
                         required
                       />

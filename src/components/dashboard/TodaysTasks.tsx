@@ -85,8 +85,8 @@ const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
                   <span>{assignment.task.estimated_duration} min</span>
                   <span>{assignment.task.points} points</span>
-                  {assignment.due_date && (
-                    <span>Due: {format(new Date(assignment.due_date), 'h:mm a')}</span>
+                  {assignment.due_datetime && (
+                    <span>Due: {format(new Date(assignment.due_datetime), 'h:mm a')}</span>
                   )}
                 </div>
               </div>

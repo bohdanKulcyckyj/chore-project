@@ -43,7 +43,7 @@ type TaskWithAssignment = {
   };
   assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
-  due_date?: string;
+  due_datetime?: string;
   status: string;
   assigned_at?: string;
   assigned_by?: string;
@@ -190,8 +190,8 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
 
   if (!task) return null;
 
-  const daysOverdue = task.due_date ? (() => {
-    const due = new Date(task.due_date);
+  const daysOverdue = task.due_datetime ? (() => {
+    const due = new Date(task.due_datetime);
     const now = new Date();
     const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
     const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -244,9 +244,9 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
                     {task.task.category.name}
                   </Badge>
                 )}
-                {task.due_date && (
+                {task.due_datetime && (
                   <Badge variant={isOverdue ? 'destructive' : 'secondary'}>
-                    Due: {format(new Date(task.due_date), 'MMM dd, yyyy')}
+                    Due: {format(new Date(task.due_datetime), 'MMM dd, yyyy')}
                     {isOverdue && ` (${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue)`}
                   </Badge>
                 )}

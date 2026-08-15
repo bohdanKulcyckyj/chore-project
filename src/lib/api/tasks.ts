@@ -144,7 +144,7 @@ export async function completeTask(
   }
 
   const completedAt = new Date();
-  const dueDate = assignment.due_date ? new Date(assignment.due_date) : null;
+  const dueDate = assignment.due_datetime ? new Date(assignment.due_datetime) : null;
   
   // Calculate points and completion result
   let completionResult = calculateTaskCompletion(task, completedAt, dueDate, completionData);

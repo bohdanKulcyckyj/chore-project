@@ -10,6 +10,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import TaskManagement from './components/tasks/TaskManagement';
 import Household from './components/household/Household';
 import Approvals from './components/approvals/Approvals';
+import Calendar from './components/calendar/Calendar';
 import Sidebar from './components/layout/Sidebar';
 
 const InviteHandler: React.FC = () => {
@@ -138,12 +139,7 @@ const AppContent: React.FC = () => {
           {activeTab === 'tasks' && <TaskManagement />}
           {activeTab === 'approvals' && <Approvals />}
           {activeTab === 'household' && <Household />}
-          {activeTab === 'calendar' && (
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-              <p className="text-gray-600 mt-2">Calendar view coming soon...</p>
-            </div>
-          )}
+          {activeTab === 'calendar' && <Calendar />}
           {activeTab === 'leaderboard' && (
             <div className="p-6">
               <h1 className="text-2xl font-bold text-gray-900">Leaderboard</h1>

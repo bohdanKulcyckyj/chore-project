@@ -18,7 +18,7 @@ type TaskWithAssignment = {
   };
   assigned_to?: string;
   assigned_user?: Tables<'user_profiles'>;
-  due_date?: string;
+  due_datetime?: string;
   status: string;
   assigned_at?: string;
   assigned_by?: string;
@@ -63,7 +63,7 @@ const TaskManagement: React.FC = () => {
           .from('task_assignments')
           .select('*')
           .in('task_id', taskIds)
-          .order('due_date', { ascending: true });
+          .order('due_datetime', { ascending: true });
 
         if (assignmentError) {
           throw assignmentError;
@@ -97,7 +97,7 @@ const TaskManagement: React.FC = () => {
             task,
             assigned_to: assignment.assigned_to,
             assigned_user: userProfiles.find(user => user.id === assignment.assigned_to),
-            due_date: assignment.due_date,
+            due_datetime: assignment.due_datetime,
             status: assignment.status,
             assigned_at: assignment.assigned_at,
             assigned_by: assignment.assigned_by,
@@ -119,10 +119,10 @@ const TaskManagement: React.FC = () => {
 
       // Sort by due date (unassigned tasks go to the end)
       combinedTasks.sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        if (!a.due_datetime && !b.due_datetime) return 0;
+        if (!a.due_datetime) return 1;
+        if (!b.due_datetime) return -1;
+        return new Date(a.due_datetime).getTime() - new Date(b.due_datetime).getTime();
       });
 
       setTasks(combinedTasks);
