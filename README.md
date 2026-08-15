@@ -84,44 +84,77 @@ A gamified household task management web application that helps families and roo
 
 ### Prerequisites
 - Node.js 18+ and npm
-- Supabase account and project
+- [Supabase CLI](https://supabase.com/docs/guides/local-development) and Docker (for the local backend)
 
-### Installation
+### Install dependencies
 
-1. Clone the repository:
 ```bash
 git clone <repository-url>
 cd houshold-duties-manager
-```
-
-2. Install dependencies:
-```bash
 npm install
 ```
 
-3. Set up environment variables:
-Create a `.env` file in the root directory:
-```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+### Running locally (frontend + backend)
+
+You need **two things running**: the Supabase backend (Postgres + Auth + API, via Docker) and the Vite frontend.
+
+**1. Start the backend** — from the project root:
+
+```bash
+supabase start
 ```
 
-4. Run database migrations:
-Apply the migrations in `supabase/migrations/` to your Supabase project.
+This spins up local Supabase in Docker and applies everything in `supabase/migrations/` (including the API role grants that let `anon`/`authenticated` reach the tables). Once it's up it prints your local URLs and keys. Local ports (from `supabase/config.toml`):
 
-5. Start the development server:
+| Service        | URL                       |
+|----------------|---------------------------|
+| API            | http://127.0.0.1:54321    |
+| Studio (DB UI) | http://127.0.0.1:54323    |
+| Postgres       | postgresql://127.0.0.1:54322 |
+| Inbucket (email) | http://127.0.0.1:54324  |
+
+Copy the printed `API URL` and `anon key` into a `.env` file in the project root:
+
+```env
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=<anon key from `supabase start` output>
+```
+
+> Lost the values? Run `supabase status` to reprint them.
+
+**2. Start the frontend** — in a second terminal:
+
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173`
+The app is served at http://localhost:5173.
+
+**Stopping the backend:** `supabase stop` (add `--no-backup` to also wipe the local DB volume).
+
+### Running against hosted Supabase (alternative)
+
+Instead of `supabase start`, point `.env` at a hosted project and apply the migrations there:
+
+```env
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your project anon key>
+```
+
+```bash
+supabase link --project-ref <project-ref>
+supabase db push   # applies supabase/migrations/ to the hosted DB
+npm run dev
+```
 
 ### Available Scripts
 
-- `npm run dev` - Start development server
+- `npm run dev` - Start the frontend dev server (Vite)
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
+- `supabase start` / `supabase stop` - Start/stop the local backend
+- `supabase status` - Reprint local URLs and keys
 
 ## Project Structure
 
