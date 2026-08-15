@@ -1,3 +1,4 @@
+- [ ] `PRINT=1 npm test` → compare each printed receipt (9×) against the original: item names readable, quantities and prices match, no item missing or merged
 - [ ] Budget tab (teal wallet icon) appears in sidebar and opens the Budget page with an empty state
 - [ ] Add a purchase with items assigned to Me / other member / Shared → card shows shop, CZK total, "Paid by", and per-owner breakdown under the correct date
 - [ ] "Split row" button turns one item into two rows with halved qty/price; "Assign all to" sets every row's owner

@@ -1,7 +1,7 @@
 # Task: Budget Feature (Grocery Spending Tracking & Bill Splitting)
 Date: 2026-08-15
 Session: 001
-Status: Phase 1 implemented — awaiting manual verification (see test-plan.md). Phase 0 not started.
+Status: Phases 0 and 1 implemented — both awaiting manual verification (see test-plan.md).
 
 ## Objective
 
@@ -93,20 +93,21 @@ Rounding: store exact numerics, round halves only at display. `N` = current memb
 
 ## Phases (each shippable alone)
 
-### Phase 0 — Receipt-parsing POC (FIRST SESSION — prove reliability before any DB/UI work)
+### Phase 0 — Receipt-parsing POC (implemented 2026-08-15, NOT yet verified manually)
 
 Standalone lib code + tests, zero app integration. Goal: all 9 real receipts in
 `receipts/` parse correctly, and every piece is runnable/verifiable via `npm run test`.
 
-- [ ] deps: `pdfjs-dist`, `tesseract.js`; dev dep: `vitest` + `"test": "vitest run"` script
-- [ ] `src/lib/receipts/types.ts` — `DraftPurchase { shop, purchasedAt, total, items }`, `DraftItem { name, quantity, unitPrice?, totalPrice }`
-- [ ] `src/lib/receipts/extractText.ts` — file/buffer → text lines: PDF via pdfjs-dist text layer, PNG/JPG via tesseract.js (`ces`). Must run in **Node (tests) and browser (Phase 4)** — worker setup differs, verify both
-- [ ] `src/lib/receipts/parsers/{albert,kaufland,lidl}.ts` + `index.ts` registry with `detect(text)` per shop
-- [ ] Resolve during POC (with fixtures as evidence): discount lines (fold into final item price vs. negative rows), Lidl OCR price artifact (`68,709 B`), `kg` vs `ks` quantity lines, deposit/bottle-return lines, multi-line item names
-- [ ] Tests — **everything testable, two layers**:
-  - `parsers.test.ts` — committed **sanitized** text fixtures (personal data scrubbed) per shop → exact expected item arrays
-  - `pipeline.local.test.ts` — full file→extract→parse run over ALL 9 real receipts, `describe.skipIf` when `receipts/` absent (folder is gitignored, so this layer runs locally only)
-- [ ] **Pass gate, per receipt: shop detected, date parsed, every item has name + price, and |Σ item totals − receipt total| < 0.01 Kč. Required: 9/9.** If a shop can't hit the gate, we know before building anything on top
+- [x] deps: `pdfjs-dist`, `tesseract.js`; dev dep: `vitest` + `"test": "vitest run"` script
+- [x] `src/lib/receipts/types.ts` — `DraftPurchase { shop, purchasedAt, total, items }`, `DraftItem { name, quantity, unitPrice?, totalPrice }`
+- [x] `src/lib/receipts/extractText.ts` — file/buffer → text lines: PDF via pdfjs-dist text layer, PNG/JPG via tesseract.js (`ces`). Node path verified by tests; **browser worker path deferred to Phase 4** (code branches on `typeof window`, nothing imports it from the app yet)
+- [x] `src/lib/receipts/parsers/{albert,kaufland,lidl}.ts` + `index.ts` registry with `detect(text)` per shop
+- [x] Resolve during POC (with fixtures as evidence): discount lines (fold into final item price vs. negative rows), Lidl OCR price artifact (`68,709 B`), `kg` vs `ks` quantity lines, deposit/bottle-return lines, multi-line item names — see Phase 0 notes
+- [x] Tests — **everything testable, two layers**:
+  - per-shop `src/__tests__/<shop>.test.ts` (instead of one `parsers.test.ts` — built in parallel) — committed **sanitized** text fixtures (personal data scrubbed) per shop → exact expected item arrays
+  - `src/__tests__/pipeline.local.test.ts` — full file→extract→parse run over ALL 9 real receipts, `describe.skipIf` when `receipts/` absent (folder is gitignored, so this layer runs locally only)
+- [x] **Pass gate, per receipt: shop detected, date parsed, every item has name + price, and |Σ item totals − receipt total| < 0.01 Kč. Required: 9/9.** → **9/9 PASS**, sum delta 0.0000 on every receipt
+- [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
 ### Phase 1 — Migration + manual entry + purchase list (implemented 2026-08-15, NOT yet verified manually)
 - [x] Migration: tables, indexes, RLS, `receipts` bucket — `supabase/migrations/20260815000000_add_budget_tables.sql`
@@ -152,6 +153,31 @@ Standalone lib code + tests, zero app integration. Goal: all 9 real receipts in
 - `receipts/` is untracked and contains real data (card fragments, loyalty info, addresses) → add to `.gitignore`; commit only anonymized extracted-text fixtures for parser tests
 
 ## Implementation Notes
+
+### Phase 0 (2026-08-15, session 001)
+
+Implemented after Phase 1 (user request). Each shop parser built by a separate
+parallel subagent against real extracted text dumps.
+
+**Files:**
+- `src/lib/receipts/types.ts`, `src/lib/receipts/extractText.ts`
+- `src/lib/receipts/parsers/{albert,kaufland,lidl}.ts` + `index.ts` (`detectParser`)
+- Tests: `src/__tests__/` — `{albert,kaufland,lidl}.test.ts` (sanitized fixtures), `pipeline.local.test.ts` (real files, local-only)
+- `package.json`: `pdfjs-dist`, `tesseract.js`, `vitest`, `"test": "vitest run"`; `.gitignore`: `*.traineddata` (tesseract Node cache lands in repo root)
+
+**Decisions / findings:**
+- pdfjs line reconstruction: group text items by y (2pt tolerance), sort by x, join without a space when glyphs touch — pdfjs splits Czech words at diacritics (`P|ř|epravka`); naive joining produced `P ř epravka`
+- Node vs browser split in `extractText.ts`: Node imports `pdfjs-dist/legacy/build/pdf.mjs` (fake worker, zero setup); browser branch lazily imports `pdfjs-dist` + `pdf.worker.min.mjs?url` — the `?url` path is only exercised in Phase 4
+- Discount lines (Lidl `SLEVA … -13,74` + `Cena po slevě`): **folded** into the previous item's totalPrice (not negative rows) — keeps sum == `K PLATBĚ`. Kaufland deposit/bottle returns stay as **negative rows** (they're real receipt lines with tax codes)
+- Lidl OCR artifacts went beyond the known glued-digit-in-decimals case: stray digit in the *integer* part (`709,84` = 70,84) and glued digits on unit prices. One deterministic fix: qty lines reconcile the previous item by trying single-digit-deletion candidates of unit/total until `qty × unit ≈ total` (±0.015); if nothing reconciles, keep item-line total, drop unitPrice
+- Kaufland one-liner items: `quantity: 1`, `unitPrice` undefined
+- Shop detection anchors: Albert `Albert Česká republika` (footer), Kaufland/Lidl their names; cross-checked negative on the other shops' texts
+
+**Programmatic verification (all pass):**
+- `npm test` — 18/18: 9 sanitized-fixture assertions + 9/9 real receipts through full pipeline (Lidl via actual tesseract.js OCR); date parsed, all items named+priced, sum delta 0.0000 everywhere
+- `npx tsc --noEmit` clean for `src/lib/receipts/`; `npx eslint src/lib/receipts/` clean; `npm run build` ✓
+- Committed fixtures grep-checked free of phone/card/loyalty/auth/account values
+- Not testable programmatically: parsed names/prices vs. the paper receipts (ground truth only human has) → test-plan.md; browser worker path → Phase 4
 
 ### Phase 1 (2026-08-15, session 001)
 

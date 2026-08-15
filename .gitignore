@@ -6,4 +6,7 @@ node_modules/**
 dist
 dist/**
 # real receipt examples - personal data, keep local only
-receipts/
+/receipts/
+
+# tesseract.js traineddata cache
+*.traineddata
