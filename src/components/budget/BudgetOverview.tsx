@@ -25,14 +25,16 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({ purchases, memberName, 
   const { user } = useAuth();
   const { currentHousehold, members } = useHousehold();
   const [settling, setSettling] = useState(false);
+  // Whose stats the week/month cards show: a member id, or null for the whole household
+  const [viewAs, setViewAs] = useState<string | null>(user?.id ?? null);
 
   const memberIds = members.map(member => member.user_id);
   const otherIds = memberIds.filter(id => id !== user?.id);
   const now = new Date();
 
   const debts = computeDebts(purchases, memberIds);
-  const week = periodStats(purchases, user?.id || '', memberIds.length, startOfWeek(now, { weekStartsOn: 1 }));
-  const month = periodStats(purchases, user?.id || '', memberIds.length, startOfMonth(now));
+  const week = periodStats(purchases, viewAs, memberIds.length, startOfWeek(now, { weekStartsOn: 1 }));
+  const month = periodStats(purchases, viewAs, memberIds.length, startOfMonth(now));
   const bars = monthlyBreakdown(purchases, 6, now);
   const maxTotal = Math.max(...bars.map(bar => bar.total), 1);
 
@@ -83,6 +85,37 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({ purchases, memberName, 
     </div>
   );
 
+  // One shared tab state drives both cards
+  const tabs: { id: string | null; label: string }[] = [
+    ...(user ? [{ id: user.id, label: 'Me' }] : []),
+    ...otherIds.map(id => ({ id, label: memberName(id) })),
+    { id: null, label: 'Total' },
+  ];
+  const tabBar = (
+    <div className="flex flex-wrap gap-1 mb-3">
+      {tabs.map(tab => (
+        <button
+          key={tab.id ?? 'total'}
+          onClick={() => setViewAs(tab.id)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+            viewAs === tab.id
+              ? 'bg-teal-100 text-teal-700'
+              : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+  const statRows = (stats: { own: number; sharedPart: number; spend: number }) => (
+    <div className="space-y-1">
+      {statRow('Own items', stats.own)}
+      {statRow('Shared part', stats.sharedPart)}
+      {statRow('Total', stats.spend, true)}
+    </div>
+  );
+
   return (
     <div className="space-y-4 mb-8">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -129,11 +162,8 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({ purchases, memberName, 
           className="bg-white rounded-2xl shadow-lg p-5"
         >
           <h3 className="font-semibold text-gray-900 mb-3">This week</h3>
-          <div className="space-y-1">
-            {statRow('Total', week.total, true)}
-            {statRow('Mine', week.mine)}
-            {statRow('Shared (my part)', week.myShareOfShared)}
-          </div>
+          {tabBar}
+          {statRows(week)}
         </motion.div>
 
         {/* This month */}
@@ -146,11 +176,8 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({ purchases, memberName, 
           <h3 className="font-semibold text-gray-900 mb-3">
             This month · {format(now, 'MMMM')}
           </h3>
-          <div className="space-y-1">
-            {statRow('Total', month.total, true)}
-            {statRow('Mine', month.mine)}
-            {statRow('Shared (my part)', month.myShareOfShared)}
-          </div>
+          {tabBar}
+          {statRows(month)}
         </motion.div>
       </div>
 

@@ -56,15 +56,17 @@ export function computeDebts(purchases: BudgetPurchase[], memberIds: string[]): 
 }
 
 export interface PeriodStats {
-  total: number; // everything bought in the period
-  mine: number; // my consumption: items I own + my share of shared
-  myShareOfShared: number; // shared items / N
+  total: number; // everything bought in the period (whole household)
+  own: number; // items marked as the viewed owner's (all owned items when owner = null)
+  sharedPart: number; // owner's share of shared items (all shared when owner = null)
+  spend: number; // own + sharedPart
 }
 
 // Spending (consumption) stats for purchases on/after `since`, settled included.
+// `owner` is a member id, or null for the whole household.
 export function periodStats(
   purchases: BudgetPurchase[],
-  userId: string,
+  owner: string | null,
   memberCount: number,
   since: Date
 ): PeriodStats {
@@ -75,12 +77,12 @@ export function periodStats(
     if (new Date(purchase.purchased_at) < since) continue;
     for (const item of purchase.purchase_items) {
       total += item.total_price;
-      if (item.owner_id === userId) own += item.total_price;
-      else if (item.owner_id === null) shared += item.total_price;
+      if (item.owner_id === null) shared += item.total_price;
+      else if (owner === null || item.owner_id === owner) own += item.total_price;
     }
   }
-  const myShareOfShared = shared / (memberCount || 1);
-  return { total, mine: own + myShareOfShared, myShareOfShared };
+  const sharedPart = owner === null ? shared : shared / (memberCount || 1);
+  return { total, own, sharedPart, spend: own + sharedPart };
 }
 
 export interface MonthBar {

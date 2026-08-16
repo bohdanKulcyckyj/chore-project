@@ -106,11 +106,27 @@ describe('periodStats', () => {
     }),
   ];
 
-  it('computes total, mine (incl. shared split) and my share of shared', () => {
+  it('computes own items, share of shared, and their sum for a member', () => {
     const stats = periodStats(purchases, ME, 2, new Date('2026-08-01T00:00:00Z'));
     expect(stats.total).toBe(200);
-    expect(stats.myShareOfShared).toBe(30);
-    expect(stats.mine).toBe(130);
+    expect(stats.own).toBe(100);
+    expect(stats.sharedPart).toBe(30);
+    expect(stats.spend).toBe(130);
+  });
+
+  it('computes stats for another member', () => {
+    const stats = periodStats(purchases, BRO, 2, new Date('2026-08-01T00:00:00Z'));
+    expect(stats.own).toBe(40);
+    expect(stats.sharedPart).toBe(30);
+    expect(stats.spend).toBe(70);
+  });
+
+  it('owner = null gives whole-household stats (all owned, full shared)', () => {
+    const stats = periodStats(purchases, null, 2, new Date('2026-08-01T00:00:00Z'));
+    expect(stats.own).toBe(140);
+    expect(stats.sharedPart).toBe(60);
+    expect(stats.spend).toBe(200);
+    expect(stats.spend).toBe(stats.total);
   });
 
   it('includes settled purchases (stats are about consumption, not balance)', () => {

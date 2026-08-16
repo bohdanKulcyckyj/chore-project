@@ -114,7 +114,7 @@ const AppContent: React.FC = () => {
       />
       
       {/* Main Content */}
-      <div className={`flex-1 transition-all duration-300 ${
+      <div className={`flex-1 min-w-0 transition-all duration-300 ${
         !isMobile && sidebarOpen ? 'ml-70' : 'ml-0'
       }`}>
         {/* Mobile Header with Hamburger */}
