@@ -11,24 +11,10 @@ async function getPdfjs() {
     return import("pdfjs-dist/legacy/build/pdf.mjs");
   }
 
-  // Browser: use legacy build and configure worker explicitly
+  // Browser: use legacy build which bundles the worker inline
+  // This avoids worker loading issues in production
   console.log("[PDF.js] Loading legacy build for browser compatibility");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-  // Configure worker - with iOS/Safari fallback
-  try {
-    const workerUrl = new URL(
-      "pdfjs-dist/legacy/build/pdf.worker.mjs",
-      import.meta.url,
-    ).href;
-    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-    console.log("[PDF.js] Worker configured:", workerUrl);
-  } catch (e) {
-    // Fallback for iOS/Safari
-    console.warn("[PDF.js] Using CDN fallback for worker:", e);
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
-  }
-
   console.log("[PDF.js] Loaded, version:", pdfjs.version);
   return pdfjs;
 }
@@ -89,9 +75,13 @@ export async function extractPdfText(
       const content = await page.getTextContent();
       const pageLines = itemsToLines(content.items as PdfTextItem[]);
       console.log(`[PDF.js] Page ${p}: extracted ${pageLines.length} lines`);
-      lines.push(...pageLines);
+      // Use concat instead of spread for better iOS compatibility
+      lines.push.apply(lines, pageLines);
     }
-    await doc.cleanup?.();
+    // Optional chaining might not work on older iOS
+    if (doc.cleanup) {
+      await doc.cleanup();
+    }
 
     const fullText = lines.join("\n");
     console.log("[PDF.js] Total extracted text length:", fullText.length);
