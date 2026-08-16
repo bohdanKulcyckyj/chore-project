@@ -42,6 +42,29 @@ VITE_SUPABASE_URL=<supabase_project_url>
 VITE_SUPABASE_ANON_KEY=<supabase_anon_key>
 ```
 
+### Running Fullstack Locally
+Two things must run: the Supabase backend (Docker) and the Vite frontend.
+
+1. **Backend** — from the project root:
+   ```bash
+   supabase start
+   ```
+   Spins up local Supabase in Docker and applies `supabase/migrations/`. Copy the printed `API URL` and `anon key` into `.env`:
+   ```env
+   VITE_SUPABASE_URL=http://127.0.0.1:54321
+   VITE_SUPABASE_ANON_KEY=<anon key from `supabase start` output>
+   ```
+   Lost the values? `supabase status` reprints them.
+
+2. **Frontend** — in a second terminal:
+   ```bash
+   npm run dev   # serves http://localhost:5173
+   ```
+
+Local service URLs (from `supabase/config.toml`): API http://127.0.0.1:54321, Studio http://127.0.0.1:54323, Postgres port 54322, Inbucket (email) http://127.0.0.1:54324.
+
+Stop the backend with `supabase stop` (`--no-backup` also wipes the local DB volume). See README.md for running against hosted Supabase instead.
+
 ## Code Organization Patterns
 
 ### Component Structure
@@ -297,6 +320,14 @@ Implement a form for creating new tasks in the household
 - Test incrementally
 - Document significant decisions
 - Ask for clarification rather than making assumptions
+
+## Frontend Verification with Playwright MCP
+
+**MANDATORY RULE**: Whenever working on frontend code (components, styling, routing, UI behavior), use the Playwright MCP tools to verify the changes in a real browser:
+1. Start the dev server (`npm run dev`, http://localhost:5173)
+2. Navigate to the affected page with Playwright MCP
+3. Verify the change visually (snapshot/screenshot) and functionally (click, type, etc.)
+4. Check the browser console for errors
 
 ## Helpful Context for AI Assistants
 
