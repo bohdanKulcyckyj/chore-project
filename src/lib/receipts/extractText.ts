@@ -11,11 +11,19 @@ async function getPdfjs() {
     return import("pdfjs-dist/legacy/build/pdf.mjs");
   }
 
-  // Browser: use legacy build which bundles the worker inline
-  // This avoids worker loading issues in production
-  console.log("[PDF.js] Loading legacy build for browser compatibility");
+  // Browser: configure worker explicitly for production builds
+  console.log("[PDF.js] Loading legacy build for browser");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  console.log("[PDF.js] Loaded, version:", pdfjs.version);
+
+  // CRITICAL: Must set workerSrc even with legacy build in Vite
+  const workerUrl = new URL(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs",
+    import.meta.url,
+  ).href;
+
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+  console.log("[PDF.js] Version:", pdfjs.version, "Worker:", workerUrl);
   return pdfjs;
 }
 
@@ -54,34 +62,40 @@ export async function extractPdfText(
   data: ArrayBuffer | Uint8Array,
 ): Promise<string> {
   try {
+    const pdfjs = await getPdfjs();
     console.log(
-      "[PDF] Loading document, size:",
+      "[PDF.js] Loading document, size:",
       data.byteLength || data.length,
       "bytes",
     );
 
-    // Use pdf-parse instead of pdfjs-dist - much simpler, works on all devices
-    const pdfParse = (await import("pdf-parse")).default;
+    const loadingTask = pdfjs.getDocument({
+      data: data instanceof Uint8Array ? data : new Uint8Array(data),
+      verbosity: 0, // Suppress PDF.js warnings in production
+    });
 
-    // Convert to Buffer for pdf-parse
-    const buffer =
-      data instanceof Uint8Array
-        ? Buffer.from(data)
-        : Buffer.from(new Uint8Array(data));
+    const doc = await loadingTask.promise;
+    console.log("[PDF.js] Document loaded, pages:", doc.numPages);
 
-    const pdfData = await pdfParse(buffer);
+    const lines: string[] = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      const pageLines = itemsToLines(content.items as PdfTextItem[]);
+      console.log(`[PDF.js] Page ${p}: extracted ${pageLines.length} lines`);
+      // Use concat instead of spread for better iOS compatibility
+      lines.push.apply(lines, pageLines);
+    }
+    // Optional chaining might not work on older iOS
+    if (doc.cleanup) {
+      await doc.cleanup();
+    }
 
-    console.log(
-      "[PDF] Extracted",
-      pdfData.numpages,
-      "pages,",
-      pdfData.text.length,
-      "chars",
-    );
-
-    return pdfData.text;
+    const fullText = lines.join("\n");
+    console.log("[PDF.js] Total extracted text length:", fullText.length);
+    return fullText;
   } catch (error) {
-    console.error("[PDF] Extraction failed:", error);
+    console.error("[PDF.js] Extraction failed:", error);
     throw new Error(
       `PDF extraction failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
