@@ -10,16 +10,12 @@ async function getPdfjs() {
     // legacy build runs on Node's fake worker without setup
     return import("pdfjs-dist/legacy/build/pdf.mjs");
   }
-  const pdfjs = await import("pdfjs-dist");
 
-  // Use CDN worker URL - more reliable than bundling the worker
-  // This ensures the worker is available in production without build issues
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
-  console.log(
-    "[PDF.js] Worker configured:",
-    pdfjs.GlobalWorkerOptions.workerSrc,
-  );
+  // Browser: use legacy build which bundles the worker inline
+  // This avoids worker loading issues in production
+  console.log("[PDF.js] Loading legacy build for browser compatibility");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  console.log("[PDF.js] Loaded, version:", pdfjs.version);
   return pdfjs;
 }
 
