@@ -15,3 +15,7 @@
 - [ ] Complete a Shopping task with the checkbox unchecked → no purchase editor, no purchase created
 - [ ] Complete a non-Shopping task → the receipt checkbox is not shown in the Complete Task modal
 - [ ] Cancel the purchase editor after completing → task stays completed, no purchase appears in Budget
+- [ ] Drag-and-drop a receipt file onto the attach area (not via click) → same import as picking the file
+- [ ] Import a Kaufland PDF in the editor → shop/date/total/items prefilled correctly vs. the paper receipt
+- [ ] Import a Lidl PNG on a phone / fresh browser profile → first OCR run shows spinner (~15 MB download), completes, and a second import is noticeably faster (cache)
+- [ ] After saving an imported purchase, open the receipt from the card → the original dropped file (PDF or image) opens

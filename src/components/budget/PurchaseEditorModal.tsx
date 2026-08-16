@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Copy, Trash2, CheckCircle, AlertTriangle, Paperclip } from 'lucide-react';
+import { X, Plus, Copy, Trash2, CheckCircle, AlertTriangle, FileUp } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -13,6 +13,9 @@ import {
   uploadReceipt,
   formatCzk,
 } from '../../lib/api/purchases';
+// pdfjs-dist / tesseract.js stay lazy — extractText dynamic-imports them per file type
+import { extractText } from '../../lib/receipts/extractText';
+import { detectParser } from '../../lib/receipts/parsers';
 
 interface PurchaseEditorModalProps {
   isOpen: boolean;
@@ -109,6 +112,42 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       : [newRow()]
   );
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+
+  // Attach + try to import: extract text (PDF text layer / OCR), detect shop,
+  // prefill the form. Any failure falls back to manual entry — never fatal.
+  const handleReceiptFile = async (file: File | null) => {
+    setReceiptFile(file);
+    if (!file || parsing) return;
+    setParsing(true);
+    try {
+      const text = await extractText(file, file.name);
+      const parser = detectParser(text);
+      if (!parser) {
+        toast('Shop not recognized — fill in items manually', { icon: '🧾' });
+        return;
+      }
+      const draft = parser.parse(text);
+      setShopName(draft.shop);
+      setDate(format(draft.purchasedAt, 'yyyy-MM-dd'));
+      setTotal(draft.total.toFixed(2));
+      setRows(
+        draft.items.map(item =>
+          newRow({
+            name: item.name,
+            quantity: String(item.quantity),
+            total_price: item.totalPrice.toFixed(2),
+          })
+        )
+      );
+      toast.success(`Imported ${draft.items.length} items from ${draft.shop}`);
+    } catch (error) {
+      console.error('Receipt import failed:', error);
+      toast('Could not read receipt — fill in items manually', { icon: '🧾' });
+    } finally {
+      setParsing(false);
+    }
+  };
 
   const updateRow = (key: number, patch: Partial<ItemRow>) => {
     setRows(prev => prev.map(row => (row.key === key ? { ...row, ...patch } : row)));
@@ -228,26 +267,24 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
     }
   };
 
-  const ownerButtons = (
-    selected: string | null | undefined,
-    onSelect: (id: string | null) => void
+  // native select — works best on phones; '' encodes Shared (null)
+  const ownerSelect = (
+    selected: string | null,
+    onSelect: (id: string | null) => void,
+    className = ''
   ) => (
-    <div className="flex flex-wrap gap-1">
+    <select
+      value={selected ?? ''}
+      onChange={e => onSelect(e.target.value || null)}
+      title="Owner"
+      className={`px-2 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent ${className}`}
+    >
       {ownerOptions.map(option => (
-        <button
-          key={option.id ?? 'shared'}
-          type="button"
-          onClick={() => onSelect(option.id)}
-          className={`px-2 py-1 text-xs font-medium rounded-lg border transition-colors ${
-            selected === option.id
-              ? 'bg-teal-500 text-white border-teal-500'
-              : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400'
-          }`}
-        >
+        <option key={option.id ?? 'shared'} value={option.id ?? ''}>
           {option.label}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   );
 
   return (
@@ -273,6 +310,49 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       {/* Form */}
       <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
         <div className="space-y-6">
+          {/* Receipt import — the fast path; manual entry below is the alternative */}
+          <div>
+            <label
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                handleReceiptFile(e.dataTransfer.files?.[0] || null);
+              }}
+              className="flex flex-col items-center gap-1 px-4 py-5 border-2 border-dashed border-teal-300 bg-teal-50/50 rounded-xl cursor-pointer hover:border-teal-400 transition-colors text-center"
+            >
+              {parsing ? (
+                <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <FileUp className="w-6 h-6 text-teal-500" />
+              )}
+              <span className="text-sm font-medium text-gray-700">
+                {parsing
+                  ? 'Reading receipt…'
+                  : receiptFile
+                    ? receiptFile.name
+                    : purchase?.receipt_url
+                      ? 'Replace attached receipt…'
+                      : 'Upload receipt (PDF/PNG/JPG)'}
+              </span>
+              {!parsing && !receiptFile && (
+                <span className="text-xs text-gray-500">
+                  Items are filled in automatically for review
+                </span>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                onChange={e => handleReceiptFile(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+            </label>
+            <div className="flex items-center gap-3 mt-4 text-xs font-medium text-gray-400 uppercase tracking-wide">
+              <div className="flex-1 h-px bg-gray-200" />
+              or enter manually
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Shop</label>
@@ -317,10 +397,21 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="block text-sm font-medium text-gray-700">Items *</label>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span>Assign all to:</span>
-                {ownerButtons(undefined, assignAll)}
-              </div>
+              {/* stays on '' so it reads as an action, not a state */}
+              <select
+                value=""
+                onChange={e => assignAll(e.target.value === 'shared' ? null : e.target.value)}
+                className="px-2 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              >
+                <option value="" disabled>
+                  Assign all to…
+                </option>
+                {ownerOptions.map(option => (
+                  <option key={option.id ?? 'shared'} value={option.id ?? 'shared'}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-3">
               {rows.map(row => (
@@ -350,7 +441,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
                     title="Price (Kč)"
                     className="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm text-right"
                   />
-                  {ownerButtons(row.owner_id, ownerId => updateRow(row.key, { owner_id: ownerId }))}
+                  {ownerSelect(row.owner_id, ownerId => updateRow(row.key, { owner_id: ownerId }), 'flex-1 min-w-[6rem]')}
                   <button
                     type="button"
                     onClick={() => splitRow(row.key)}
@@ -380,7 +471,6 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
             </button>
           </div>
 
-          {/* Total + receipt */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -401,27 +491,6 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Receipt PDF (optional)
-              </label>
-              <label className="flex items-center gap-2 px-4 py-3 border border-dashed border-gray-300 rounded-xl text-sm text-gray-600 hover:border-teal-400 cursor-pointer transition-colors">
-                <Paperclip className="w-4 h-4 shrink-0" />
-                <span className="truncate">
-                  {receiptFile
-                    ? receiptFile.name
-                    : purchase?.receipt_url
-                      ? 'Replace attached receipt…'
-                      : 'Attach file…'}
-                </span>
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={e => setReceiptFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-              </label>
-            </div>
           </div>
         </div>
 
@@ -436,7 +505,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || parsing}
             className="flex-1 px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl hover:from-teal-600 hover:to-emerald-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (

@@ -1,7 +1,7 @@
 # Task: Budget Feature (Grocery Spending Tracking & Bill Splitting)
 Date: 2026-08-15
 Session: 001
-Status: Phases 0, 1, 2 and 3 implemented — all awaiting manual verification (see test-plan.md).
+Status: All phases (0–4) implemented — all awaiting manual verification (see test-plan.md).
 
 ## Objective
 
@@ -131,11 +131,12 @@ Standalone lib code + tests, zero app integration. Goal: all 9 real receipts in
 - [x] Purchase list shows a badge/link when tied to a task completion
 - [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
-### Phase 4 — Receipt import UI (wires Phase 0 lib into the editor)
-- [ ] Editor: drop zone accepting `.pdf/.png/.jpg` → extract → parse → prefilled rows for review (parser mistakes are editable, never fatal)
-- [ ] Lazy-load pdfjs-dist / tesseract.js only when a file is dropped (tesseract downloads ~15 MB WASM + `ces` traineddata on first use, browser-cached after)
-- [ ] Unknown shop (`detect` misses) → toast, fall back to manual entry
-- [ ] Upload original file to `receipts` bucket on save
+### Phase 4 — Receipt import UI (implemented 2026-08-16, NOT yet verified manually)
+- [x] Editor: drop zone accepting `.pdf/.png/.jpg` → extract → parse → prefilled rows for review (parser mistakes are editable, never fatal)
+- [x] Lazy-load pdfjs-dist / tesseract.js only when a file is dropped (tesseract downloads ~15 MB WASM + `ces` traineddata on first use, browser-cached after)
+- [x] Unknown shop (`detect` misses) → toast, fall back to manual entry
+- [x] Upload original file to `receipts` bucket on save
+- [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
 **Verified against real examples (2026-08-15, basis for Phase 0):**
 - Albert + Kaufland PDFs have clean text layers (`pdftotext` confirmed) — no OCR needed
@@ -253,3 +254,44 @@ existed from Phase 1. No migration, no new files.
 - Playwright browser run (local stack, seeded Shopping task, real login): checkbox appears in Complete Task modal for Shopping category → completed task ("Perfect timing! 🎯" toast + celebration) → purchase editor opened automatically → saved Albert / Mléko / 35,90 Kč → psql confirms `purchases.task_completion_id` = the real `task_completions.id` → Budget tab shows the card with "Shopping task" badge → zero console errors
 - Test data fully cleaned up afterwards (purchase, completion, assignment, task, user_points restored, auth password restored from backup)
 - Not testable programmatically (or not worth re-seeding for): unchecked-checkbox and non-Shopping negative paths, cancel-editor path, visuals → `test-plan.md`
+
+### Phase 4 (2026-08-16, session 001)
+
+One file changed: `src/components/budget/PurchaseEditorModal.tsx`. Everything else
+already existed — extract/parse lib from Phase 0, upload-on-save from Phase 1.
+
+**Decisions / findings:**
+- `extractText` / `detectParser` imported **statically** — both modules are tiny;
+  the heavy deps stay lazy because `extractText.ts` already dynamic-imports
+  pdfjs-dist / tesseract.js per file type. Build confirms: pdfjs + worker land in
+  separate lazy chunks, main bundle unchanged
+- No separate drop zone: the existing attach `<label>` got `onDragOver`/`onDrop`
+  + widened `accept` (pdf/png/jpg) — one control for attach and import
+- Import prefills shop, date, total, and rows (all owners default to Shared);
+  it **replaces** existing rows — dropping a receipt states the intent
+- Unknown shop / extract error → neutral 🧾 toast, file stays attached, manual
+  entry untouched; submit disabled while `parsing` (rows would be swapped mid-save)
+- Upload-original-on-save needed zero work: `uploadReceipt` already keys the
+  storage path off the real file extension
+
+**Programmatic verification (all pass):**
+- `npx tsc --noEmit` clean; eslint clean on the file; `npm test` 26/26; `npm run build` ✓ (pdfjs code-split into lazy chunks)
+- Playwright browser run (local stack, real receipts): Albert PDF → 12 items,
+  shop/date/total prefilled, sum = total 618,60 → saved → psql confirms purchase
+  + 12 items + original PDF in `receipts` bucket. Lidl PNG → real in-browser
+  tesseract OCR → 12 items, sum = `K PLATBĚ` 649,70, spinner shown while parsing.
+  Blank PNG → "Shop not recognized" toast, manual entry intact. Zero console errors
+- Test data fully cleaned up (purchase, items, storage object via Storage API)
+- Not testable programmatically: real drag-and-drop gesture, Kaufland-PDF import
+  in browser (parser fixture-tested only), first-use OCR download on a cold
+  profile, signed-URL open of the uploaded original → `test-plan.md`
+
+**Mobile UX pass (2026-08-16, user feedback):** same file only. Per-row owner
+segmented buttons → native `<select>` ('' = Shared); "Assign all to" buttons →
+placeholder-style select (stays on "Assign all to…", 'shared' sentinel → null).
+Receipt input moved to the top of the form as a prominent full-width drop zone
+with an "or enter manually" divider — communicates upload-vs-manual as the two
+entry paths; total field keeps the bottom row alone. Verified via Playwright at
+375×667: no horizontal overflow in editor or Budget page, rows wrap to two clean
+lines, assign-all/per-row/Shared selects verified functionally, balance math
+correct on saved purchase (all-shared 618,60 → owes 309,30). Test data cleaned.
