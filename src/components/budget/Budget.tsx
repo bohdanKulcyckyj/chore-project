@@ -55,10 +55,18 @@ const Budget: React.FC = () => {
   };
 
   const openReceipt = async (path: string) => {
+    // Open the tab synchronously inside the click handler — iOS Safari blocks
+    // window.open() called after an await (outside the user-gesture call stack).
+    const win = window.open('', '_blank');
     try {
       const url = await getReceiptSignedUrl(path);
-      window.open(url, '_blank');
+      if (win) {
+        win.location.href = url;
+      } else {
+        window.location.href = url; // popup blocked entirely -> same-tab fallback
+      }
     } catch (error) {
+      win?.close();
       console.error('Error opening receipt:', error);
       toast.error('Failed to open receipt');
     }
