@@ -90,7 +90,7 @@ async function uploadPhotos(
     const fileName = `${completionId}-${index}.${fileExt}`;
     const filePath = `${householdId}/${taskId}/${completionId}/${fileName}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('task-completion-photos')
       .upload(filePath, photo, {
         cacheControl: '3600',
@@ -142,6 +142,15 @@ export async function completeTask(
 
   if (assignment.status === 'completed') {
     throw new Error('Task is already completed');
+  }
+
+  // Guard against completing future materialized recurring instances early.
+  // All UI paths (task table, dashboard, calendar) route through here.
+  if (
+    assignment.due_datetime &&
+    new Date(assignment.due_datetime).getTime() - Date.now() > 24 * 60 * 60 * 1000
+  ) {
+    throw new Error("This task isn't due yet");
   }
 
   const completedAt = new Date();

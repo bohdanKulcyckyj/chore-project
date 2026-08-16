@@ -14,14 +14,14 @@ import {
   UserPlus,
   MoreVertical,
   Edit3,
-  Archive
+  Archive,
+  Repeat
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import toast from 'react-hot-toast';
-import AdminGuard from '../auth/AdminGuard';
 import CompleteTaskModal from './CompleteTaskModal';
 import TaskDetailModal from './TaskDetailModal';
 import PurchaseEditorModal from '../budget/PurchaseEditorModal';
@@ -79,7 +79,6 @@ interface FilterState {
   status: string;
   category: string;
   assignedTo: string;
-  dateRange: string;
 }
 
 interface SortState {
@@ -98,8 +97,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   const [filters, setFilters] = useState<FilterState>({
     status: '__all__',
     category: '__all__',
-    assignedTo: '__all__',
-    dateRange: '__all__'
+    assignedTo: '__all__'
   });
   const [sort, setSort] = useState<SortState>({
     field: 'due_datetime',
@@ -232,7 +230,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
       toast.success(result.message);
     } catch (error) {
       console.error('Error completing task:', error);
-      toast.error('Failed to complete task');
+      toast.error(error instanceof Error ? error.message : 'Failed to complete task');
       throw error;
     }
   };
@@ -321,9 +319,6 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
-
-  // Alias for compatibility (in case of cached references)
-  const getStatusVariant = getStatusColor;
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -543,7 +538,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setFilters({ status: '__all__', category: '__all__', assignedTo: '__all__', dateRange: '__all__' });
+                  setFilters({ status: '__all__', category: '__all__', assignedTo: '__all__' });
                   setSearchTerm('');
                 }}
                 className="w-full sm:w-auto"
@@ -614,7 +609,15 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 >
                   <TableCell>
                     <div>
-                      <div className="font-medium text-gray-900">{assignment.task.name}</div>
+                      <div className="font-medium text-gray-900 flex items-center gap-2">
+                        {assignment.task.name}
+                        {assignment.task.recurrence_type !== 'none' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            <Repeat className="w-3 h-3 mr-1" />
+                            recurring
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm text-gray-500 truncate max-w-xs">
                         {assignment.task.description}
                       </div>
@@ -781,6 +784,14 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
                   {assignment.task.difficulty}
                 </span>
+
+                {/* Recurring */}
+                {assignment.task.recurrence_type !== 'none' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    <Repeat className="w-3 h-3 mr-1" />
+                    recurring
+                  </span>
+                )}
 
                 {/* Category */}
                 {assignment.task.category && (

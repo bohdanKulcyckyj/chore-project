@@ -45,20 +45,26 @@ const PersonalTaskStats: React.FC = () => {
         .eq('household_id', currentHousehold.id)
         .single();
 
-      // Get user's task assignments
+      // Get user's task assignments (!inner so the household filter drops parent rows)
       const { data: assignments } = await supabase
         .from('task_assignments')
         .select(`
           *,
-          task:tasks(*),
+          task:tasks!inner(*),
           task_completions(*)
         `)
         .eq('assigned_to', user.id)
         .eq('task.household_id', currentHousehold.id);
 
-      // Calculate current assignments status
-      const pendingTasks = assignments?.filter(a => a.status === 'pending').length || 0;
-      const inProgressTasks = assignments?.filter(a => a.status === 'in_progress').length || 0;
+      // Calculate current assignments status, excluding future materialized
+      // recurring instances (only count rows due by end of today, or undated)
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const isDueNow = (dueDatetime: string | null) =>
+        !dueDatetime || new Date(dueDatetime) <= endOfToday;
+
+      const pendingTasks = assignments?.filter(a => a.status === 'pending' && isDueNow(a.due_datetime)).length || 0;
+      const inProgressTasks = assignments?.filter(a => a.status === 'in_progress' && isDueNow(a.due_datetime)).length || 0;
 
       // Calculate time-based stats
       const now = new Date();

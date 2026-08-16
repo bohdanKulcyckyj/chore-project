@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckSquare, Plus, Download, Upload, Users, AlertCircle } from 'lucide-react';
+import { CheckSquare, Plus, Download, Upload, Users } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
@@ -54,23 +54,51 @@ const TaskManagement: React.FC = () => {
         throw tasksError;
       }
 
-      // Fetch all assignments for these tasks
+      // Fetch assignments for these tasks, bounded to the next 7 days
+      // (recurring tasks materialize ~28 days of future rows we don't want here)
       const taskIds = allTasks?.map(t => t.id) || [];
       let assignments: Tables<'task_assignments'>[] = [];
-      
+      let everAssignedTaskIds = new Set<string>();
+
       if (taskIds.length > 0) {
+        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const { data: assignmentData, error: assignmentError } = await supabase
           .from('task_assignments')
           .select('*')
           .in('task_id', taskIds)
+          .or(`due_datetime.lte.${sevenDaysFromNow},due_datetime.is.null`)
           .order('due_datetime', { ascending: true });
 
         if (assignmentError) {
           throw assignmentError;
         }
-        
+
         assignments = assignmentData || [];
+
+        // Unbounded lookup of which tasks have any assignment rows at all,
+        // so tasks with only far-future instances don't show as unassigned
+        const { data: assignedIds, error: assignedIdsError } = await supabase
+          .from('task_assignments')
+          .select('task_id')
+          .in('task_id', taskIds);
+
+        if (assignedIdsError) {
+          throw assignedIdsError;
+        }
+
+        everAssignedTaskIds = new Set(assignedIds?.map(a => a.task_id) || []);
       }
+
+      // Collapse recurring tasks to their earliest non-completed assignment
+      // (rows are ordered asc by due_datetime, so first match wins)
+      const seenRecurring = new Set<string>();
+      assignments = assignments.filter(assignment => {
+        const task = allTasks?.find(t => t.id === assignment.task_id);
+        if (!task || task.recurrence_type === 'none') return true;
+        if (assignment.status === 'completed' || seenRecurring.has(assignment.task_id)) return false;
+        seenRecurring.add(assignment.task_id);
+        return true;
+      });
 
       // Fetch user profiles for assigned users
       const userIds = [...new Set(assignments.map(a => a.assigned_to).filter(Boolean))];
@@ -105,10 +133,9 @@ const TaskManagement: React.FC = () => {
         }
       });
 
-      // Add unassigned tasks
-      const assignedTaskIds = new Set(assignments.map(a => a.task_id));
+      // Add unassigned tasks (only tasks that have never had an assignment row)
       allTasks?.forEach(task => {
-        if (!assignedTaskIds.has(task.id)) {
+        if (!everAssignedTaskIds.has(task.id)) {
           combinedTasks.push({
             id: `unassigned-${task.id}`,
             task,

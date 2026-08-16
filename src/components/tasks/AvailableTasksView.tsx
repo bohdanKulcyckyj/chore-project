@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Calendar, Clock, Star, UserPlus, Tag } from 'lucide-react';
-import { format } from 'date-fns';
+import { Search, Clock, Star, UserPlus, Tag } from 'lucide-react';
 import { supabase, Tables } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
@@ -81,7 +80,7 @@ const AvailableTasksView: React.FC<AvailableTasksViewProps> = ({ onTaskClaimed }
         .insert({
           task_id: task.id,
           assigned_to: user.id,
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+          due_datetime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
           assigned_by: user.id,
           status: 'pending',
         });
