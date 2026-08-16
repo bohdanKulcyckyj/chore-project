@@ -6,3 +6,8 @@
 - [ ] Attach a PDF when saving → receipt icon appears on the card and opens the file in a new tab
 - [ ] Edit an existing purchase (change an item, price, owner) → changes persist after reload; delete removes the card
 - [ ] Sign in as the second household member → the purchase is visible and its receipt opens
+- [ ] With unsettled purchases (own + other's + shared items), Balance card shows "X owes you / You owe X" with the amount you'd compute by hand (other's items full + shared/2)
+- [ ] Settle up → confirm dialog → balance flips to "All settled up", purchase cards gain the Settled badge; the other member sees the same after reload
+- [ ] Add a new purchase after settling → balance reappears counting only the new one
+- [ ] This week / This month cards show Total / Mine / Shared (my part) matching the purchases you entered (week starts Monday)
+- [ ] Last 6 months chart: bars only in months that have purchases, stacked colors match the legend, hover tooltip shows per-person amounts

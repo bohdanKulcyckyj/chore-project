@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { usePurchases } from './hooks/usePurchases';
 import PurchaseEditorModal from './PurchaseEditorModal';
+import BudgetOverview from './BudgetOverview';
 import {
   PurchaseWithItems,
   deletePurchase,
@@ -108,6 +109,11 @@ const Budget: React.FC = () => {
           Add Purchase
         </button>
       </div>
+
+      {/* Overview: balance, week/month stats, past months */}
+      {purchases.length > 0 && (
+        <BudgetOverview purchases={purchases} memberName={memberName} onSettled={refetch} />
+      )}
 
       {/* Empty state */}
       {purchases.length === 0 && (

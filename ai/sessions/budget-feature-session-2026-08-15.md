@@ -1,7 +1,7 @@
 # Task: Budget Feature (Grocery Spending Tracking & Bill Splitting)
 Date: 2026-08-15
 Session: 001
-Status: Phases 0 and 1 implemented — both awaiting manual verification (see test-plan.md).
+Status: Phases 0, 1 and 2 implemented — all awaiting manual verification (see test-plan.md).
 
 ## Objective
 
@@ -119,11 +119,12 @@ Standalone lib code + tests, zero app integration. Goal: all 9 real receipts in
 - [x] Sidebar + App.tsx: `budget` tab (Wallet icon, `text-teal-500`)
 - [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
-### Phase 2 — Overviews + balance + settle-up
-- [ ] Balance card: "Brother owes you X Kč" + Settle up (confirm dialog)
-- [ ] This week / this month cards: total, mine, shared (my half)
-- [ ] Past ~6 months comparison — Tailwind stacked bars
-- [ ] All aggregation client-side with date-fns
+### Phase 2 — Overviews + balance + settle-up (implemented 2026-08-15, NOT yet verified manually)
+- [x] Balance card: "Brother owes you X Kč" + Settle up (confirm dialog)
+- [x] This week / this month cards: total, mine, shared (my half)
+- [x] Past ~6 months comparison — Tailwind stacked bars
+- [x] All aggregation client-side with date-fns
+- [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
 ### Phase 3 — Shopping task integration
 - [ ] `CompleteTaskModal.tsx`: when task category = Shopping, optional "Add receipt from this trip" → opens `PurchaseEditorModal`, saves purchase with `task_completion_id`
@@ -206,3 +207,24 @@ dependency on the parsing POC (PDF attach is upload-only).
 - psql checks: both tables RLS-enabled, 5 table policies, `receipts` bucket `public=false`, 4 storage policies, helper fn + both indexes exist
 - SQL RLS smoke test (`SET LOCAL role authenticated` + JWT claims, real local users): member A insert purchase+items ✓; member B same household sees it and can settle-up ✓; B (non-creator, non-admin) delete blocked (DELETE 0) ✓; outsider sees 0 rows and insert blocked ✓; creator delete ✓ with item cascade ✓
 - Not testable programmatically: browser UI flows + storage signed-URL path → `test-plan.md`
+
+### Phase 2 (2026-08-15, session 001)
+
+**Files:**
+- `src/lib/budgetMath.ts` — pure aggregation: `computeDebts` (pairwise net over unsettled purchases), `periodStats` (total / mine / my share of shared since a date), `monthlyBreakdown` (per-month per-owner segments)
+- `src/__tests__/budgetMath.test.ts` — 8 unit tests over the math
+- `src/components/budget/BudgetOverview.tsx` — balance card + settle-up, this-week / this-month cards, last-6-months stacked bars + legend
+- `src/components/budget/Budget.tsx` — renders `BudgetOverview` above the list (hidden while there are zero purchases)
+
+**Decisions / findings:**
+- Math lives in `src/lib/budgetMath.ts` with **structural types** (subset of DB row fields) instead of importing `PurchaseWithItems` — keeps unit tests free of the supabase client/env
+- Debts netted pairwise via a sorted `"a|b"` key map; entries under 0,005 Kč dropped (round to 0,00). Generalizes past 2 members for free
+- Period cards: `Mine` = my items + shared/N (the core-math "my spending" definition); `Shared (my part)` shown separately as shared/N. Stats include settled purchases (consumption ≠ balance); balance uses only unsettled
+- Bars: pure CSS — bar height = total/maxTotal %, segments proportional via `flexGrow: amount` + `flexBasis: 0` in a `flex-col-reverse` stack (me bottom, other members, shared top). Negative-total segments filtered from render only
+- Settle-up confirm uses `window.confirm`, matching the existing delete-purchase pattern
+- Week starts Monday (`weekStartsOn: 1`)
+
+**Programmatic verification (all pass):**
+- `npm test` — 26/26 (8 new budgetMath tests + all prior suites incl. 9/9 real-receipt pipeline)
+- `npx tsc --noEmit` clean; `npx eslint` clean on all 4 new/changed files; `npm run build` ✓
+- Not testable programmatically: rendered card/chart correctness and settle-up round-trip in the browser → `test-plan.md`
