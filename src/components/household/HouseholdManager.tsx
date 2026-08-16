@@ -49,8 +49,8 @@ const HouseholdManager: React.FC = () => {
       toast.success('Household created successfully!');
       setView('main');
       setFormData({ name: '', description: '', inviteCode: '' });
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create household');
+    } catch (error) {
+      toast.error((error as Error).message || 'Failed to create household');
     } finally {
       setLoading(false);
     }
@@ -70,8 +70,8 @@ const HouseholdManager: React.FC = () => {
       toast.success(message);
       setView('main');
       setFormData({ name: '', description: '', inviteCode: '' });
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to join household');
+    } catch (error) {
+      toast.error((error as Error).message || 'Failed to join household');
     } finally {
       setLoading(false);
     }

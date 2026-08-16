@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Trophy, TrendingUp, Star } from 'lucide-react';
+import { Users, Trophy, Star } from 'lucide-react';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
 

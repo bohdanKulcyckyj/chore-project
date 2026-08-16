@@ -36,8 +36,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange }) => {
         if (error) throw error;
         toast.success('Account created successfully!');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Authentication failed');
+    } catch (error) {
+      toast.error((error as Error).message || 'Authentication failed');
     } finally {
       setLoading(false);
     }

@@ -30,7 +30,6 @@ type HouseholdMemberWithProfile = Tables<'household_members'> & {
 const Household: React.FC = () => {
   const { user } = useAuth();
   const { currentHousehold, members, isAdmin, refreshData } = useHousehold();
-  const [loading, setLoading] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
 
   const handleCopyInviteCode = () => {

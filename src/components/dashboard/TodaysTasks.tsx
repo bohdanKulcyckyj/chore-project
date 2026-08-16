@@ -17,7 +17,7 @@ interface TodaysTasksProps {
   onTaskUpdate: () => void;
 }
 
-const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
+const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks }) => {
   const [detailModalTask, setDetailModalTask] = useState<TaskAssignment | null>(null);
 
   const handleTaskClick = (task: TaskAssignment) => {

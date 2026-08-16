@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Calendar, Trophy, Users, CheckSquare, Clock } from 'lucide-react';
+import { Plus, Calendar, Trophy, CheckSquare, Clock } from 'lucide-react';
 
 const QuickActions: React.FC = () => {
   const actions = [

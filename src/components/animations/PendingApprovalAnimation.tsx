@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Clock, 
-  Heart, 
-  Star,
+import {
+  Heart,
   Sparkles,
   Eye,
-  MessageCircle,
   CheckCircle2,
   Timer
 } from 'lucide-react';

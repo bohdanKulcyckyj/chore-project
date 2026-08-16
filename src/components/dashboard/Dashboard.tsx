@@ -3,17 +3,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
 import { motion } from 'framer-motion';
-import { 
-  Home, 
-  Trophy, 
-  Flame, 
-  CheckCircle, 
-  Clock, 
-  Star,
-  TrendingUp,
-  Calendar,
-  Users,
-  Target
+import {
+  Trophy,
+  Flame,
+  CheckCircle,
+  Star
 } from 'lucide-react';
 import StatsCard from './StatsCard';
 import QuickActions from './QuickActions';

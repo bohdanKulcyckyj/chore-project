@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, XCircle, Clock, User, Calendar, MessageSquare, Eye, MoreVertical, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, User, Calendar, MoreVertical, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase, Tables } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';

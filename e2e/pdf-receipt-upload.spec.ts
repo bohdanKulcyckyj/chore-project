@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { setupTestUserAndHousehold } from "./helpers/auth";
 
@@ -33,8 +33,7 @@ const findTestPDF = (): string | null => {
         return candidate;
       }
       // It's a directory, find first PDF
-      const fs = require("fs");
-      const files = fs.readdirSync(candidate);
+      const files = readdirSync(candidate);
       const pdf = files.find((f: string) => f.endsWith(".pdf"));
       if (pdf) return join(candidate, pdf);
     }
@@ -131,17 +130,6 @@ test.describe("PDF Receipt Upload and Parsing", () => {
 
     console.log("✅ Parsing completed");
 
-    // Check for success indicators
-    // Option 1: Shop name should be filled
-    const shopInput = page.locator(
-      'input[placeholder*="Albert"], input[value*="Albert"], input[value*="Kaufland"], input[value*="Lidl"]',
-    );
-
-    // Option 2: Items should be populated
-    const itemInputs = page
-      .locator('input[placeholder*="Item name"], input[type="text"]')
-      .filter({ hasText: /.+/ });
-
     // Give it a moment for the form to populate
     await page.waitForTimeout(1000);
 
@@ -151,12 +139,6 @@ test.describe("PDF Receipt Upload and Parsing", () => {
       fullPage: true,
     });
     console.log("📸 Screenshot saved to e2e/screenshots/pdf-upload-result.png");
-
-    // Verify no PDF.js worker errors in console
-    const logs = await page.evaluate(() => {
-      // Check if there were any console errors
-      return (window as any).__consoleErrors || [];
-    });
 
     // Check page content for error messages
     const errorToast = page
@@ -180,7 +162,9 @@ test.describe("PDF Receipt Upload and Parsing", () => {
       // Try to access PDF.js if it's loaded
       return {
         hasWindow: typeof window !== "undefined",
-        hasPdfjsDist: typeof (window as any).pdfjsLib !== "undefined",
+        hasPdfjsDist:
+          typeof (window as unknown as { pdfjsLib?: unknown }).pdfjsLib !==
+          "undefined",
         // Try to trigger PDF.js load by importing
         timestamp: new Date().toISOString(),
       };
