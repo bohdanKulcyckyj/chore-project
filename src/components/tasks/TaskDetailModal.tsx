@@ -14,14 +14,16 @@ import {
   UserPlus,
   Star,
   Award,
-  Activity
+  Activity,
+  Repeat
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tables } from '../../lib/supabase';
+import { getRecurrenceText, RecurrencePattern } from '../../lib/recurrence';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-type TaskWithAssignment = {
+export type TaskWithAssignment = {
   id: string;
   task: Tables<'tasks'> & {
     category?: Tables<'task_categories'>;
@@ -255,6 +257,18 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             <Tag className="w-3 h-3" />
                             {task.task.category.name}
                           </Badge>
+                        </div>
+                      )}
+
+                      {task.task.recurrence_type !== 'none' && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Repeats:</span>
+                          <div className="flex items-center gap-2">
+                            <Repeat className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium text-gray-900">
+                              {getRecurrenceText(task.task.recurrence_pattern as RecurrencePattern)}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>

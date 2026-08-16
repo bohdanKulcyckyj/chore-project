@@ -1,96 +1,56 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, Tables } from '../../../lib/supabase';
 import { useHousehold } from '../../../hooks/useHousehold';
-import { format, parseISO, getHours } from 'date-fns';
 
-// Types
 export type TaskAssignment = Tables<'task_assignments'>;
-export type Task = Tables<'tasks'>;
-export type TaskCategory = Tables<'task_categories'>;
-export type UserProfile = Tables<'user_profiles'>;
 
 export interface TaskWithAssignment extends TaskAssignment {
-  tasks: Task & {
-    task_categories?: TaskCategory | null;
+  tasks: Tables<'tasks'> & {
+    task_categories?: Tables<'task_categories'> | null;
   };
-  user_profiles?: UserProfile | null;
+  user_profiles?: Tables<'user_profiles'> | null;
 }
 
 export interface CalendarFilters {
-  memberIds: string[];
-  statuses: ('pending' | 'in_progress' | 'completed' | 'overdue' | 'skipped')[];
-  categoryIds: string[];
+  memberId: string; // '' = all members
+  status: string; // '' = all statuses
 }
 
 export interface CalendarDataState {
-  // Data
   tasks: TaskWithAssignment[];
   loading: boolean;
   error: string | null;
-
-  // Filtering
   filters: CalendarFilters;
   setFilters: (filters: Partial<CalendarFilters>) => void;
-  clearFilters: () => void;
-
-  // Data organization
-  getTasksForDate: (date: Date) => TaskWithAssignment[];
-  getTasksForTimeSlot: (date: Date, hour: number) => TaskWithAssignment[];
-
-  // Actions
   refreshData: () => Promise<void>;
 }
 
-const DEFAULT_FILTERS: CalendarFilters = {
-  memberIds: [],
-  statuses: [],
-  categoryIds: []
-};
-
 export const useCalendarData = (
-  startDate: Date,
-  endDate: Date
+  startDate: Date | null,
+  endDate: Date | null
 ): CalendarDataState => {
-  const { currentHousehold } = useHousehold();
+  const { currentHousehold, members } = useHousehold();
   const [rawTasks, setRawTasks] = useState<TaskWithAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFiltersState] = useState<CalendarFilters>(DEFAULT_FILTERS);
+  const [filters, setFiltersState] = useState<CalendarFilters>({ memberId: '', status: '' });
 
-  // Fetch calendar tasks for the specified date range
+  // Fetch exactly the visible range reported by FullCalendar's datesSet ([start, end))
   const fetchCalendarTasks = useCallback(async () => {
-    if (!currentHousehold) return;
+    if (!currentHousehold || !startDate || !endDate) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const startISO = format(startDate, 'yyyy-MM-dd\'T\'00:00:00');
-      const endISO = format(endDate, 'yyyy-MM-dd\'T\'23:59:59');
-
+      // No FK from task_assignments to user_profiles, so no embed here —
+      // assignee profiles are resolved client-side from household members below.
       const { data, error } = await supabase
         .from('task_assignments')
-        .select(`
-          *,
-          tasks!inner(
-            id,
-            name,
-            description,
-            category_id,
-            difficulty,
-            points,
-            estimated_duration,
-            task_categories(name, color, icon)
-          ),
-          user_profiles!assigned_to(
-            id,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select('*, tasks!inner(*, task_categories(*))')
         .eq('tasks.household_id', currentHousehold.id)
-        .gte('due_datetime', startISO)
-        .lte('due_datetime', endISO)
+        .gte('due_datetime', startDate.toISOString())
+        .lt('due_datetime', endDate.toISOString())
         .order('due_datetime', { ascending: true });
 
       if (error) throw error;
@@ -104,102 +64,58 @@ export const useCalendarData = (
     }
   }, [currentHousehold, startDate, endDate]);
 
-  // Filter tasks based on current filters
-  const filteredTasks = useMemo(() => {
-    return rawTasks.filter(task => {
-      // Member filter
-      if (filters.memberIds.length > 0) {
-        if (!filters.memberIds.includes(task.assigned_to)) return false;
-      }
+  // Attach assignee profile + apply filters (single filtering layer)
+  const tasks = useMemo(() => {
+    const profileById = new Map(members.map(m => [m.user_id, m.user_profile]));
+    return rawTasks
+      .map(t => ({ ...t, user_profiles: profileById.get(t.assigned_to) ?? null }))
+      .filter(t =>
+        (!filters.memberId || t.assigned_to === filters.memberId) &&
+        (!filters.status || t.status === filters.status)
+      );
+  }, [rawTasks, members, filters]);
 
-      // Status filter
-      if (filters.statuses.length > 0) {
-        if (!filters.statuses.includes(task.status)) return false;
-      }
-
-      // Category filter
-      if (filters.categoryIds.length > 0) {
-        if (!task.tasks.category_id || !filters.categoryIds.includes(task.tasks.category_id)) return false;
-      }
-
-      return true;
-    });
-  }, [rawTasks, filters]);
-
-  // Get tasks for a specific date
-  const getTasksForDate = useCallback((date: Date): TaskWithAssignment[] => {
-    const targetDateStr = format(date, 'yyyy-MM-dd');
-    return filteredTasks.filter(task => {
-      if (!task.due_datetime) return false;
-      const taskDateStr = format(parseISO(task.due_datetime), 'yyyy-MM-dd');
-      return taskDateStr === targetDateStr;
-    });
-  }, [filteredTasks]);
-
-  // Get tasks for a specific time slot (hour) on a date
-  const getTasksForTimeSlot = useCallback((date: Date, hour: number): TaskWithAssignment[] => {
-    const tasksForDate = getTasksForDate(date);
-    return tasksForDate.filter(task => {
-      if (!task.due_datetime) return false;
-      const taskHour = getHours(parseISO(task.due_datetime));
-      return taskHour === hour;
-    });
-  }, [getTasksForDate]);
-
-  // Update filters
   const setFilters = useCallback((newFilters: Partial<CalendarFilters>) => {
     setFiltersState(prev => ({ ...prev, ...newFilters }));
   }, []);
 
-  // Clear all filters
-  const clearFilters = useCallback(() => {
-    setFiltersState(DEFAULT_FILTERS);
-  }, []);
-
-  // Refresh data
-  const refreshData = useCallback(async () => {
-    await fetchCalendarTasks();
-  }, [fetchCalendarTasks]);
-
-  // Fetch data when dependencies change
   useEffect(() => {
     fetchCalendarTasks();
   }, [fetchCalendarTasks]);
 
-  // Real-time subscription for task changes
-  useEffect(() => {
-    if (!currentHousehold) return;
+  // Realtime: one subscription per household; latest fetch via ref so date
+  // changes don't resubscribe.
+  const refetchRef = useRef(fetchCalendarTasks);
+  refetchRef.current = fetchCalendarTasks;
 
-    const subscription = supabase
-      .channel('calendar-tasks')
-      .on('postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'task_assignments',
-          filter: `tasks.household_id=eq.${currentHousehold.id}`
-        },
-        () => {
-          // Refresh calendar data when task assignments change
-          refreshData();
-        }
+  const householdId = currentHousehold?.id;
+  useEffect(() => {
+    if (!householdId) return;
+
+    // ponytail: unfiltered — postgres_changes can't filter on the joined tasks
+    // table's household_id, and the refetch is already scoped to household +
+    // date window. Fine at household scale; add a household_id column on
+    // task_assignments if fan-out ever matters.
+    const channel = supabase
+      .channel(`calendar-tasks-${householdId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'task_assignments' },
+        () => refetchRef.current()
       )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(channel);
     };
-  }, [currentHousehold, refreshData]);
+  }, [householdId]);
 
   return {
-    tasks: filteredTasks,
+    tasks,
     loading,
     error,
     filters,
     setFilters,
-    clearFilters,
-    getTasksForDate,
-    getTasksForTimeSlot,
-    refreshData
+    refreshData: fetchCalendarTasks,
   };
 };
