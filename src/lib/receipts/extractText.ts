@@ -54,40 +54,34 @@ export async function extractPdfText(
   data: ArrayBuffer | Uint8Array,
 ): Promise<string> {
   try {
-    const pdfjs = await getPdfjs();
     console.log(
-      "[PDF.js] Loading document, size:",
+      "[PDF] Loading document, size:",
       data.byteLength || data.length,
       "bytes",
     );
 
-    const loadingTask = pdfjs.getDocument({
-      data: data instanceof Uint8Array ? data : new Uint8Array(data),
-      verbosity: 0, // Suppress PDF.js warnings in production
-    });
+    // Use pdf-parse instead of pdfjs-dist - much simpler, works on all devices
+    const pdfParse = (await import("pdf-parse")).default;
 
-    const doc = await loadingTask.promise;
-    console.log("[PDF.js] Document loaded, pages:", doc.numPages);
+    // Convert to Buffer for pdf-parse
+    const buffer =
+      data instanceof Uint8Array
+        ? Buffer.from(data)
+        : Buffer.from(new Uint8Array(data));
 
-    const lines: string[] = [];
-    for (let p = 1; p <= doc.numPages; p++) {
-      const page = await doc.getPage(p);
-      const content = await page.getTextContent();
-      const pageLines = itemsToLines(content.items as PdfTextItem[]);
-      console.log(`[PDF.js] Page ${p}: extracted ${pageLines.length} lines`);
-      // Use concat instead of spread for better iOS compatibility
-      lines.push.apply(lines, pageLines);
-    }
-    // Optional chaining might not work on older iOS
-    if (doc.cleanup) {
-      await doc.cleanup();
-    }
+    const pdfData = await pdfParse(buffer);
 
-    const fullText = lines.join("\n");
-    console.log("[PDF.js] Total extracted text length:", fullText.length);
-    return fullText;
+    console.log(
+      "[PDF] Extracted",
+      pdfData.numpages,
+      "pages,",
+      pdfData.text.length,
+      "chars",
+    );
+
+    return pdfData.text;
   } catch (error) {
-    console.error("[PDF.js] Extraction failed:", error);
+    console.error("[PDF] Extraction failed:", error);
     throw new Error(
       `PDF extraction failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
