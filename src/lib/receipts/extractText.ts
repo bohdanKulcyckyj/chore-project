@@ -11,11 +11,21 @@ async function getPdfjs() {
     return import("pdfjs-dist/legacy/build/pdf.mjs");
   }
 
-  // Browser: use legacy build which bundles the worker inline
-  // This avoids worker loading issues in production
+  // Browser: use legacy build and configure worker explicitly
   console.log("[PDF.js] Loading legacy build for browser compatibility");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  // Even though legacy build has a fake worker, Vite bundling requires explicit configuration
+  // Use a dynamic import with ?url to get the worker file path
+  const workerUrl = new URL(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs",
+    import.meta.url,
+  ).href;
+
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
   console.log("[PDF.js] Loaded, version:", pdfjs.version);
+  console.log("[PDF.js] Worker configured:", workerUrl);
   return pdfjs;
 }
 
