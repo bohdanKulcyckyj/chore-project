@@ -88,7 +88,8 @@ CREATE POLICY "Household members can manage purchase items"
 
 -- Private bucket for receipt files (financial data -> signed URLs, not public)
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('receipts', 'receipts', false);
+VALUES ('receipts', 'receipts', false)
+ON CONFLICT (id) DO NOTHING;
 
 -- Path convention: householdId/purchaseId.pdf -> first folder is household_id
 CREATE POLICY "Household members can upload receipts" ON storage.objects

@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Copy, Trash2, CheckCircle, AlertTriangle, FileUp } from 'lucide-react';
-import { format } from 'date-fns';
-import toast from 'react-hot-toast';
-import { useAuth } from '../../hooks/useAuth';
-import { useHousehold } from '../../hooks/useHousehold';
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  Plus,
+  Copy,
+  Trash2,
+  CheckCircle,
+  AlertTriangle,
+  FileUp,
+} from "lucide-react";
+import { format } from "date-fns";
+import toast from "react-hot-toast";
+import { useAuth } from "../../hooks/useAuth";
+import { useHousehold } from "../../hooks/useHousehold";
 import {
   PurchaseWithItems,
   PurchaseItemInput,
@@ -12,10 +20,10 @@ import {
   updatePurchase,
   uploadReceipt,
   formatCzk,
-} from '../../lib/api/purchases';
+} from "../../lib/api/purchases";
 // pdfjs-dist / tesseract.js stay lazy — extractText dynamic-imports them per file type
-import { extractText } from '../../lib/receipts/extractText';
-import { detectParser } from '../../lib/receipts/parsers';
+import { extractText } from "../../lib/receipts/extractText";
+import { detectParser } from "../../lib/receipts/parsers";
 
 interface PurchaseEditorModalProps {
   isOpen: boolean;
@@ -34,14 +42,14 @@ interface ItemRow {
 }
 
 // Czech habit: comma decimals
-const parseNum = (value: string): number => parseFloat(value.replace(',', '.'));
+const parseNum = (value: string): number => parseFloat(value.replace(",", "."));
 
 let nextKey = 0;
 const newRow = (partial: Partial<ItemRow> = {}): ItemRow => ({
   key: nextKey++,
-  name: '',
-  quantity: '1',
-  total_price: '',
+  name: "",
+  quantity: "1",
+  total_price: "",
   owner_id: null,
   ...partial,
 });
@@ -72,7 +80,7 @@ const PurchaseEditorModal: React.FC<PurchaseEditorModalProps> = ({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
         >
           <PurchaseForm
-            key={purchase?.id ?? 'new'}
+            key={purchase?.id ?? "new"}
             onClose={onClose}
             onSaved={onSaved}
             purchase={purchase}
@@ -84,7 +92,7 @@ const PurchaseEditorModal: React.FC<PurchaseEditorModalProps> = ({
   </AnimatePresence>
 );
 
-const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
+const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, "isOpen">> = ({
   onClose,
   onSaved,
   purchase,
@@ -93,23 +101,28 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
   const { user } = useAuth();
   const { currentHousehold, members } = useHousehold();
   const [loading, setLoading] = useState(false);
-  const [shopName, setShopName] = useState(purchase?.shop_name ?? '');
+  const [shopName, setShopName] = useState(purchase?.shop_name ?? "");
   const [date, setDate] = useState(() =>
-    format(purchase ? new Date(purchase.purchased_at) : new Date(), 'yyyy-MM-dd')
+    format(
+      purchase ? new Date(purchase.purchased_at) : new Date(),
+      "yyyy-MM-dd",
+    ),
   );
-  const [paidBy, setPaidBy] = useState(purchase?.paid_by ?? user?.id ?? '');
-  const [total, setTotal] = useState(purchase ? String(purchase.total_amount) : '');
+  const [paidBy, setPaidBy] = useState(purchase?.paid_by ?? user?.id ?? "");
+  const [total, setTotal] = useState(
+    purchase ? String(purchase.total_amount) : "",
+  );
   const [rows, setRows] = useState<ItemRow[]>(() =>
     purchase
-      ? purchase.purchase_items.map(item =>
+      ? purchase.purchase_items.map((item) =>
           newRow({
             name: item.name,
             quantity: String(item.quantity),
             total_price: String(item.total_price),
             owner_id: item.owner_id,
-          })
+          }),
         )
-      : [newRow()]
+      : [newRow()],
   );
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -122,47 +135,63 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
     setParsing(true);
     try {
       const text = await extractText(file, file.name);
+      console.log("[Receipt] Extracted text length:", text.length);
+      console.log("[Receipt] First 200 chars:", text.substring(0, 200));
+
       const parser = detectParser(text);
       if (!parser) {
-        toast('Shop not recognized — fill in items manually', { icon: '🧾' });
+        console.warn(
+          "[Receipt] No parser detected for text:",
+          text.substring(0, 500),
+        );
+        toast("Shop not recognized — fill in items manually", { icon: "🧾" });
         return;
       }
+
+      console.log("[Receipt] Using parser:", parser.shop);
       const draft = parser.parse(text);
+      console.log("[Receipt] Parsed:", draft);
+
       setShopName(draft.shop);
-      setDate(format(draft.purchasedAt, 'yyyy-MM-dd'));
+      setDate(format(draft.purchasedAt, "yyyy-MM-dd"));
       setTotal(draft.total.toFixed(2));
       setRows(
-        draft.items.map(item =>
+        draft.items.map((item) =>
           newRow({
             name: item.name,
             quantity: String(item.quantity),
             total_price: item.totalPrice.toFixed(2),
-          })
-        )
+          }),
+        ),
       );
       toast.success(`Imported ${draft.items.length} items from ${draft.shop}`);
     } catch (error) {
-      console.error('Receipt import failed:', error);
-      toast('Could not read receipt — fill in items manually', { icon: '🧾' });
+      console.error("[Receipt] Import failed:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Receipt import failed: ${message}`, { duration: 5000 });
     } finally {
       setParsing(false);
     }
   };
 
   const updateRow = (key: number, patch: Partial<ItemRow>) => {
-    setRows(prev => prev.map(row => (row.key === key ? { ...row, ...patch } : row)));
+    setRows((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+    );
   };
 
   const splitRow = (key: number) => {
-    setRows(prev => {
-      const index = prev.findIndex(row => row.key === key);
+    setRows((prev) => {
+      const index = prev.findIndex((row) => row.key === key);
       const row = prev[index];
       const qty = parseNum(row.quantity);
       const price = parseNum(row.total_price);
-      const halfQty = isNaN(qty) ? '' : String(qty / 2);
+      const halfQty = isNaN(qty) ? "" : String(qty / 2);
       // keep the sum exact: first half rounded, second gets the remainder
-      const half1 = isNaN(price) ? '' : (Math.round((price / 2) * 100) / 100).toFixed(2);
-      const half2 = isNaN(price) ? '' : (price - parseNum(half1)).toFixed(2);
+      const half1 = isNaN(price)
+        ? ""
+        : (Math.round((price / 2) * 100) / 100).toFixed(2);
+      const half2 = isNaN(price) ? "" : (price - parseNum(half1)).toFixed(2);
       const updated = { ...row, quantity: halfQty, total_price: half1 };
       const copy = newRow({
         name: row.name,
@@ -175,11 +204,11 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
   };
 
   const removeRow = (key: number) => {
-    setRows(prev => prev.filter(row => row.key !== key));
+    setRows((prev) => prev.filter((row) => row.key !== key));
   };
 
   const assignAll = (ownerId: string | null) => {
-    setRows(prev => prev.map(row => ({ ...row, owner_id: ownerId })));
+    setRows((prev) => prev.map((row) => ({ ...row, owner_id: ownerId })));
   };
 
   const itemsSum = rows.reduce((sum, row) => {
@@ -187,18 +216,18 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
     return sum + (isNaN(price) ? 0 : price);
   }, 0);
 
-  const totalNum = total.trim() === '' ? NaN : parseNum(total);
+  const totalNum = total.trim() === "" ? NaN : parseNum(total);
   const sumMismatch = !isNaN(totalNum) && Math.abs(itemsSum - totalNum) >= 0.01;
 
   const ownerOptions: { id: string | null; label: string }[] = [
-    ...members.map(member => ({
+    ...members.map((member) => ({
       id: member.user_id,
       label:
         member.user_id === user?.id
-          ? 'Me'
-          : member.user_profile?.display_name || 'Unknown',
+          ? "Me"
+          : member.user_profile?.display_name || "Unknown",
     })),
-    { id: null, label: 'Shared' },
+    { id: null, label: "Shared" },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -206,12 +235,12 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
     if (!currentHousehold || !user) return;
 
     if (rows.length === 0) {
-      toast.error('Add at least one item');
+      toast.error("Add at least one item");
       return;
     }
     for (const row of rows) {
       if (!row.name.trim()) {
-        toast.error('Every item needs a name');
+        toast.error("Every item needs a name");
         return;
       }
       if (isNaN(parseNum(row.total_price))) {
@@ -220,7 +249,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       }
     }
 
-    const items: PurchaseItemInput[] = rows.map(row => ({
+    const items: PurchaseItemInput[] = rows.map((row) => ({
       name: row.name.trim(),
       quantity: isNaN(parseNum(row.quantity)) ? 1 : parseNum(row.quantity),
       total_price: parseNum(row.total_price),
@@ -232,9 +261,13 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       shop_name: shopName.trim(),
       purchased_at: new Date(`${date}T12:00:00`).toISOString(),
       paid_by: paidBy,
-      total_amount: isNaN(totalNum) ? Math.round(itemsSum * 100) / 100 : totalNum,
+      total_amount: isNaN(totalNum)
+        ? Math.round(itemsSum * 100) / 100
+        : totalNum,
       // only on create; updates leave the existing link untouched (field absent)
-      ...(!purchase && taskCompletionId ? { task_completion_id: taskCompletionId } : {}),
+      ...(!purchase && taskCompletionId
+        ? { task_completion_id: taskCompletionId }
+        : {}),
     };
 
     setLoading(true);
@@ -251,17 +284,19 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
         try {
           await uploadReceipt(currentHousehold.id, purchaseId, receiptFile);
         } catch (uploadError) {
-          console.error('Receipt upload failed:', uploadError);
-          toast.error('Purchase saved, but receipt upload failed');
+          console.error("Receipt upload failed:", uploadError);
+          toast.error("Purchase saved, but receipt upload failed");
         }
       }
 
-      toast.success(purchase ? 'Purchase updated!' : 'Purchase added!');
+      toast.success(purchase ? "Purchase updated!" : "Purchase added!");
       onSaved();
       onClose();
     } catch (error: unknown) {
-      console.error('Error saving purchase:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to save purchase');
+      console.error("Error saving purchase:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save purchase",
+      );
     } finally {
       setLoading(false);
     }
@@ -271,16 +306,16 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
   const ownerSelect = (
     selected: string | null,
     onSelect: (id: string | null) => void,
-    className = ''
+    className = "",
   ) => (
     <select
-      value={selected ?? ''}
-      onChange={e => onSelect(e.target.value || null)}
+      value={selected ?? ""}
+      onChange={(e) => onSelect(e.target.value || null)}
       title="Owner"
       className={`px-2 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent ${className}`}
     >
-      {ownerOptions.map(option => (
-        <option key={option.id ?? 'shared'} value={option.id ?? ''}>
+      {ownerOptions.map((option) => (
+        <option key={option.id ?? "shared"} value={option.id ?? ""}>
           {option.label}
         </option>
       ))}
@@ -293,7 +328,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-teal-50 to-emerald-50">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-            {purchase ? 'Edit Purchase' : 'Add Purchase'}
+            {purchase ? "Edit Purchase" : "Add Purchase"}
           </h2>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Track who bought what
@@ -308,13 +343,16 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+      <form
+        onSubmit={handleSubmit}
+        className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)]"
+      >
         <div className="space-y-6">
           {/* Receipt import — the fast path; manual entry below is the alternative */}
           <div>
             <label
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
                 e.preventDefault();
                 handleReceiptFile(e.dataTransfer.files?.[0] || null);
               }}
@@ -327,12 +365,12 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
               )}
               <span className="text-sm font-medium text-gray-700">
                 {parsing
-                  ? 'Reading receipt…'
+                  ? "Reading receipt…"
                   : receiptFile
                     ? receiptFile.name
                     : purchase?.receipt_url
-                      ? 'Replace attached receipt…'
-                      : 'Upload receipt (PDF/PNG/JPG)'}
+                      ? "Replace attached receipt…"
+                      : "Upload receipt (PDF/PNG/JPG)"}
               </span>
               {!parsing && !receiptFile && (
                 <span className="text-xs text-gray-500">
@@ -342,7 +380,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
               <input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                onChange={e => handleReceiptFile(e.target.files?.[0] || null)}
+                onChange={(e) => handleReceiptFile(e.target.files?.[0] || null)}
                 className="hidden"
               />
             </label>
@@ -355,38 +393,44 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Shop</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Shop
+              </label>
               <input
                 type="text"
                 value={shopName}
-                onChange={e => setShopName(e.target.value)}
+                onChange={(e) => setShopName(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-base"
                 placeholder="e.g., Albert"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Date *
+              </label>
               <input
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                onChange={(e) => setDate(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-base"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Paid by *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Paid by *
+              </label>
               <select
                 value={paidBy}
-                onChange={e => setPaidBy(e.target.value)}
+                onChange={(e) => setPaidBy(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-base"
                 required
               >
-                {members.map(member => (
+                {members.map((member) => (
                   <option key={member.user_id} value={member.user_id}>
                     {member.user_id === user?.id
-                      ? 'Me'
-                      : member.user_profile?.display_name || 'Unknown'}
+                      ? "Me"
+                      : member.user_profile?.display_name || "Unknown"}
                   </option>
                 ))}
               </select>
@@ -396,30 +440,42 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
           {/* Items */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">Items *</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Items *
+              </label>
               {/* stays on '' so it reads as an action, not a state */}
               <select
                 value=""
-                onChange={e => assignAll(e.target.value === 'shared' ? null : e.target.value)}
+                onChange={(e) =>
+                  assignAll(e.target.value === "shared" ? null : e.target.value)
+                }
                 className="px-2 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
               >
                 <option value="" disabled>
                   Assign all to…
                 </option>
-                {ownerOptions.map(option => (
-                  <option key={option.id ?? 'shared'} value={option.id ?? 'shared'}>
+                {ownerOptions.map((option) => (
+                  <option
+                    key={option.id ?? "shared"}
+                    value={option.id ?? "shared"}
+                  >
                     {option.label}
                   </option>
                 ))}
               </select>
             </div>
             <div className="space-y-3">
-              {rows.map(row => (
-                <div key={row.key} className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-xl">
+              {rows.map((row) => (
+                <div
+                  key={row.key}
+                  className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-xl"
+                >
                   <input
                     type="text"
                     value={row.name}
-                    onChange={e => updateRow(row.key, { name: e.target.value })}
+                    onChange={(e) =>
+                      updateRow(row.key, { name: e.target.value })
+                    }
                     placeholder="Item name"
                     className="flex-1 min-w-[10rem] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
                   />
@@ -427,7 +483,9 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
                     type="text"
                     inputMode="decimal"
                     value={row.quantity}
-                    onChange={e => updateRow(row.key, { quantity: e.target.value })}
+                    onChange={(e) =>
+                      updateRow(row.key, { quantity: e.target.value })
+                    }
                     placeholder="Qty"
                     title="Quantity"
                     className="w-16 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm text-center"
@@ -436,12 +494,18 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
                     type="text"
                     inputMode="decimal"
                     value={row.total_price}
-                    onChange={e => updateRow(row.key, { total_price: e.target.value })}
+                    onChange={(e) =>
+                      updateRow(row.key, { total_price: e.target.value })
+                    }
                     placeholder="Kč"
                     title="Price (Kč)"
                     className="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm text-right"
                   />
-                  {ownerSelect(row.owner_id, ownerId => updateRow(row.key, { owner_id: ownerId }), 'flex-1 min-w-[6rem]')}
+                  {ownerSelect(
+                    row.owner_id,
+                    (ownerId) => updateRow(row.key, { owner_id: ownerId }),
+                    "flex-1 min-w-[6rem]",
+                  )}
                   <button
                     type="button"
                     onClick={() => splitRow(row.key)}
@@ -463,7 +527,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
             </div>
             <button
               type="button"
-              onClick={() => setRows(prev => [...prev, newRow()])}
+              onClick={() => setRows((prev) => [...prev, newRow()])}
               className="mt-3 flex items-center gap-2 px-4 py-2 text-sm font-medium text-teal-600 hover:bg-teal-50 rounded-xl transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -480,7 +544,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
                 type="text"
                 inputMode="decimal"
                 value={total}
-                onChange={e => setTotal(e.target.value)}
+                onChange={(e) => setTotal(e.target.value)}
                 placeholder={`Items sum: ${formatCzk(itemsSum)}`}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-base"
               />
@@ -513,7 +577,7 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, 'isOpen'>> = ({
             ) : (
               <>
                 <CheckCircle className="w-5 h-5" />
-                {purchase ? 'Save Changes' : 'Add Purchase'}
+                {purchase ? "Save Changes" : "Add Purchase"}
               </>
             )}
           </button>

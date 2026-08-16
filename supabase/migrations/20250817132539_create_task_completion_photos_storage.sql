@@ -1,6 +1,7 @@
 -- Create storage bucket for task completion photos
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('task-completion-photos', 'task-completion-photos', true);
+VALUES ('task-completion-photos', 'task-completion-photos', true)
+ON CONFLICT (id) DO NOTHING;
 
 -- Set up storage policies for the bucket
 -- Allow authenticated users to upload photos
