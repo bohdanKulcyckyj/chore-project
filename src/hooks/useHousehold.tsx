@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { supabase, Tables } from '../lib/supabase';
+import { materializeHousehold } from '../lib/recurrence';
 import { useAuth } from './useAuth';
 
 type Household = Tables<'households'>;
@@ -13,10 +14,10 @@ interface HouseholdContextType {
   members: HouseholdMember[];
   isAdmin: boolean;
   loading: boolean;
-  createHousehold: (name: string, description?: string) => Promise<any>;
-  joinHousehold: (inviteCode: string) => Promise<any>;
+  createHousehold: (name: string, description?: string) => Promise<{ data?: Household | null; error: unknown }>;
+  joinHousehold: (inviteCode: string) => Promise<{ data?: Household | null; error: unknown; message?: string }>;
   switchHousehold: (householdId: string) => void;
-  leaveHousehold: () => Promise<any>;
+  leaveHousehold: () => Promise<{ error: unknown }>;
   refreshData: () => Promise<void>;
 }
 
@@ -40,6 +41,7 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const materializedHouseholds = useRef(new Set<string>());
 
   const isAdmin = members.some(member => 
     member.user_id === user?.id && member.role === 'admin'
@@ -126,6 +128,11 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
 
   useEffect(() => {
     fetchMembers();
+    // Fire-and-forget: materialize recurring task assignments once per household per session
+    if (currentHousehold && !materializedHouseholds.current.has(currentHousehold.id)) {
+      materializedHouseholds.current.add(currentHousehold.id);
+      void materializeHousehold(currentHousehold.id, supabase);
+    }
   }, [currentHousehold]);
 
   const createHousehold = async (name: string, description = '') => {
@@ -189,7 +196,7 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
 
     try {
       // First, let's see what households exist and their invite codes
-      const { data: allHouseholds, error: debugError } = await supabase
+      const { data: allHouseholds } = await supabase
         .from('households')
         .select('id, name, invite_code');
         

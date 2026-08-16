@@ -1,8 +1,11 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
   test: {
+    // e2e/*.spec.ts is Playwright's, not vitest's
+    exclude: [...configDefaults.exclude, "e2e/**"],
+
     // Default environment is node (for existing pipeline.test.ts and parser tests)
     environment: "node",
 

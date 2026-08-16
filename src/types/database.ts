@@ -1,3 +1,12 @@
+export interface RecurrencePattern {
+  rrule: string;
+  dtstart: string;
+  rotation?: {
+    members: string[];
+    startIndex?: number;
+  };
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -85,7 +94,7 @@ export interface Database {
           points: number;
           requires_approval: boolean;
           recurrence_type: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
-          recurrence_pattern: Record<string, any>;
+          recurrence_pattern: RecurrencePattern | Record<string, never>;
           assignment_type: 'fixed' | 'rotating' | 'flexible';
           created_by: string | null;
           created_at: string;
@@ -103,7 +112,7 @@ export interface Database {
           points?: number;
           requires_approval?: boolean;
           recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
-          recurrence_pattern?: Record<string, any>;
+          recurrence_pattern?: RecurrencePattern | Record<string, never>;
           assignment_type?: 'fixed' | 'rotating' | 'flexible';
           created_by?: string | null;
           created_at?: string;
@@ -121,7 +130,7 @@ export interface Database {
           points?: number;
           requires_approval?: boolean;
           recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
-          recurrence_pattern?: Record<string, any>;
+          recurrence_pattern?: RecurrencePattern | Record<string, never>;
           assignment_type?: 'fixed' | 'rotating' | 'flexible';
           created_by?: string | null;
           created_at?: string;
@@ -252,7 +261,7 @@ export interface Database {
           color: string;
           points_required: number;
           condition_type: 'points' | 'streak' | 'tasks' | 'category' | 'custom';
-          condition_value: Record<string, any>;
+          condition_value: Record<string, unknown>;
           is_repeatable: boolean;
           created_at: string;
         };
@@ -264,7 +273,7 @@ export interface Database {
           color?: string;
           points_required?: number;
           condition_type?: 'points' | 'streak' | 'tasks' | 'category' | 'custom';
-          condition_value?: Record<string, any>;
+          condition_value?: Record<string, unknown>;
           is_repeatable?: boolean;
           created_at?: string;
         };
@@ -276,7 +285,7 @@ export interface Database {
           color?: string;
           points_required?: number;
           condition_type?: 'points' | 'streak' | 'tasks' | 'category' | 'custom';
-          condition_value?: Record<string, any>;
+          condition_value?: Record<string, unknown>;
           is_repeatable?: boolean;
           created_at?: string;
         };
@@ -288,7 +297,7 @@ export interface Database {
           achievement_id: string;
           household_id: string;
           earned_at: string;
-          progress: Record<string, any>;
+          progress: Record<string, unknown>;
         };
         Insert: {
           id?: string;
@@ -296,7 +305,7 @@ export interface Database {
           achievement_id: string;
           household_id: string;
           earned_at?: string;
-          progress?: Record<string, any>;
+          progress?: Record<string, unknown>;
         };
         Update: {
           id?: string;
@@ -304,7 +313,7 @@ export interface Database {
           achievement_id?: string;
           household_id?: string;
           earned_at?: string;
-          progress?: Record<string, any>;
+          progress?: Record<string, unknown>;
         };
       };
       notifications: {
@@ -315,7 +324,7 @@ export interface Database {
           type: 'task_due' | 'task_overdue' | 'task_assigned' | 'task_approved' | 'task_rejected' | 'achievement_earned' | 'household_update';
           title: string;
           message: string;
-          data: Record<string, any>;
+          data: Record<string, unknown>;
           is_read: boolean;
           created_at: string;
         };
@@ -326,7 +335,7 @@ export interface Database {
           type: 'task_due' | 'task_overdue' | 'task_assigned' | 'task_approved' | 'task_rejected' | 'achievement_earned' | 'household_update';
           title: string;
           message: string;
-          data?: Record<string, any>;
+          data?: Record<string, unknown>;
           is_read?: boolean;
           created_at?: string;
         };
@@ -337,7 +346,7 @@ export interface Database {
           type?: 'task_due' | 'task_overdue' | 'task_assigned' | 'task_approved' | 'task_rejected' | 'achievement_earned' | 'household_update';
           title?: string;
           message?: string;
-          data?: Record<string, any>;
+          data?: Record<string, unknown>;
           is_read?: boolean;
           created_at?: string;
         };
