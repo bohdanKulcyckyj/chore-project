@@ -1,29 +1,20 @@
 // File/buffer → plain text. PDF via pdfjs-dist text layer, images via tesseract.js OCR.
 // Runs in Node (tests, no worker) and browser (Phase 4, real workers).
 
-const isNode = typeof window === "undefined";
+// v4 legacy build: polyfilled for iOS/Safari 15.4+ (v5+ legacy needs 17.4+)
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+
+// process-based, not window-based: vitest's happy-dom has a window but must
+// still use pdfjs's Node fake worker (no real Worker to spawn)
+const isNode =
+  typeof process !== "undefined" && process.versions?.node != null;
 
 type PdfTextItem = { str: string; transform: number[]; width: number };
 
 async function getPdfjs() {
-  if (isNode) {
-    // legacy build runs on Node's fake worker without setup
-    return import("pdfjs-dist/legacy/build/pdf.mjs");
-  }
-
-  // Browser: configure worker explicitly for production builds
-  console.log("[PDF.js] Loading legacy build for browser");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-  // CRITICAL: Must set workerSrc even with legacy build in Vite
-  const workerUrl = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-    import.meta.url,
-  ).href;
-
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
-  console.log("[PDF.js] Version:", pdfjs.version, "Worker:", workerUrl);
+  // Node (tests) uses pdfjs's built-in fake worker; browser needs the real one
+  if (!isNode) pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
   return pdfjs;
 }
 
@@ -63,37 +54,20 @@ export async function extractPdfText(
 ): Promise<string> {
   try {
     const pdfjs = await getPdfjs();
-    console.log(
-      "[PDF.js] Loading document, size:",
-      data.byteLength || data.length,
-      "bytes",
-    );
-
     const loadingTask = pdfjs.getDocument({
       data: data instanceof Uint8Array ? data : new Uint8Array(data),
-      verbosity: 0, // Suppress PDF.js warnings in production
+      verbosity: 0,
     });
-
     const doc = await loadingTask.promise;
-    console.log("[PDF.js] Document loaded, pages:", doc.numPages);
 
     const lines: string[] = [];
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
       const content = await page.getTextContent();
-      const pageLines = itemsToLines(content.items as PdfTextItem[]);
-      console.log(`[PDF.js] Page ${p}: extracted ${pageLines.length} lines`);
-      // Use concat instead of spread for better iOS compatibility
-      lines.push.apply(lines, pageLines);
+      lines.push(...itemsToLines(content.items as PdfTextItem[]));
     }
-    // Optional chaining might not work on older iOS
-    if (doc.cleanup) {
-      await doc.cleanup();
-    }
-
-    const fullText = lines.join("\n");
-    console.log("[PDF.js] Total extracted text length:", fullText.length);
-    return fullText;
+    await doc.cleanup();
+    return lines.join("\n");
   } catch (error) {
     console.error("[PDF.js] Extraction failed:", error);
     throw new Error(
