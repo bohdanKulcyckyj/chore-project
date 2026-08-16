@@ -1,7 +1,7 @@
 # Task: Budget Feature (Grocery Spending Tracking & Bill Splitting)
 Date: 2026-08-15
 Session: 001
-Status: Phases 0, 1 and 2 implemented — all awaiting manual verification (see test-plan.md).
+Status: Phases 0, 1, 2 and 3 implemented — all awaiting manual verification (see test-plan.md).
 
 ## Objective
 
@@ -126,9 +126,10 @@ Standalone lib code + tests, zero app integration. Goal: all 9 real receipts in
 - [x] All aggregation client-side with date-fns
 - [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
-### Phase 3 — Shopping task integration
-- [ ] `CompleteTaskModal.tsx`: when task category = Shopping, optional "Add receipt from this trip" → opens `PurchaseEditorModal`, saves purchase with `task_completion_id`
-- [ ] Purchase list shows a badge/link when tied to a task completion
+### Phase 3 — Shopping task integration (implemented 2026-08-16, NOT yet verified manually)
+- [x] `CompleteTaskModal.tsx`: when task category = Shopping, optional "Add receipt from this trip" → opens `PurchaseEditorModal`, saves purchase with `task_completion_id`
+- [x] Purchase list shows a badge/link when tied to a task completion
+- [ ] Manual verification passed (test-plan.md) → then mark phase complete
 
 ### Phase 4 — Receipt import UI (wires Phase 0 lib into the editor)
 - [ ] Editor: drop zone accepting `.pdf/.png/.jpg` → extract → parse → prefilled rows for review (parser mistakes are editable, never fatal)
@@ -228,3 +229,27 @@ dependency on the parsing POC (PDF attach is upload-only).
 - `npm test` — 26/26 (8 new budgetMath tests + all prior suites incl. 9/9 real-receipt pipeline)
 - `npx tsc --noEmit` clean; `npx eslint` clean on all 4 new/changed files; `npm run build` ✓
 - Not testable programmatically: rendered card/chart correctness and settle-up round-trip in the browser → `test-plan.md`
+
+### Phase 3 (2026-08-16, session 001)
+
+Pure UI wiring — `task_completion_id` column, FK, and `PurchaseInput` field already
+existed from Phase 1. No migration, no new files.
+
+**Files (all edits, no new files):**
+- `src/lib/api/tasks.ts` — `TaskCompletionResult.completionId?` + returned from `completeTask`
+- `src/components/tasks/CompleteTaskModal.tsx` — "Add receipt from this trip to the budget" checkbox, rendered only when `task.category?.name === 'Shopping'`; flows out as `addPurchase` on the completion data
+- `src/components/tasks/TaskTable.tsx` — on `addPurchase && result.completionId` opens `PurchaseEditorModal` with `taskCompletionId`
+- `src/components/budget/PurchaseEditorModal.tsx` — optional `taskCompletionId` prop, written as `task_completion_id` on **create only** (updates omit the field, so existing links survive edits)
+- `src/components/budget/Budget.tsx` — blue "Shopping task" badge (ClipboardCheck) on cards with `task_completion_id`
+
+**Decisions / findings:**
+- Checkbox lives in `CompleteTaskModal`, editor opens from `TaskTable` *after* `completeTask` succeeds — the completion id doesn't exist before that, and a failed completion must not create an orphan purchase
+- Calendar's `useTaskActions.completeTask` bypasses `CompleteTaskModal` entirely → no receipt offer from the calendar view (accepted scope, matches plan wording "CompleteTaskModal hook point")
+- `onSaved` from TaskTable is a no-op — the Budget tab refetches on mount, nothing to refresh from the tasks view
+- Badge is display-only (no link to the task) — purchase → task navigation has no target view; add if ever asked
+
+**Programmatic verification (all pass):**
+- `npx tsc --noEmit` clean; `npm test` 26/26; `npm run build` ✓; eslint — only pre-existing unused-import errors in touched files, none from new code
+- Playwright browser run (local stack, seeded Shopping task, real login): checkbox appears in Complete Task modal for Shopping category → completed task ("Perfect timing! 🎯" toast + celebration) → purchase editor opened automatically → saved Albert / Mléko / 35,90 Kč → psql confirms `purchases.task_completion_id` = the real `task_completions.id` → Budget tab shows the card with "Shopping task" badge → zero console errors
+- Test data fully cleaned up afterwards (purchase, completion, assignment, task, user_points restored, auth password restored from backup)
+- Not testable programmatically (or not worth re-seeding for): unchecked-checkbox and non-Shopping negative paths, cancel-editor path, visuals → `test-plan.md`

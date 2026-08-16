@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Wallet, FileText, Pencil, Trash2, CheckCircle } from 'lucide-react';
+import { Plus, Wallet, FileText, Pencil, Trash2, CheckCircle, ClipboardCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -149,6 +149,15 @@ const Budget: React.FC = () => {
                         <span className="text-lg font-bold text-teal-600">
                           {formatCzk(purchase.total_amount)}
                         </span>
+                        {purchase.task_completion_id && (
+                          <span
+                            title="Recorded from a completed Shopping task"
+                            className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium"
+                          >
+                            <ClipboardCheck className="w-3 h-3" />
+                            Shopping task
+                          </span>
+                        )}
                         {purchase.settled_at && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                             <CheckCircle className="w-3 h-3" />

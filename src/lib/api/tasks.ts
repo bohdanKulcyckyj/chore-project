@@ -14,6 +14,7 @@ export interface TaskCompletionResult {
   hasPhotos: boolean;
   requiresApproval: boolean;
   approvalStatus: 'approved' | 'pending';
+  completionId?: string; // set by completeTask; used to link a budget purchase
 }
 
 function daysBetween(dueDate: Date, completedDate: Date): number {
@@ -257,7 +258,7 @@ export async function completeTask(
     }
   }
 
-  return completionResult;
+  return { ...completionResult, completionId };
 }
 
 // Supabase function for atomic transaction

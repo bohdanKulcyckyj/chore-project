@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import AdminGuard from '../auth/AdminGuard';
 import CompleteTaskModal from './CompleteTaskModal';
 import TaskDetailModal from './TaskDetailModal';
+import PurchaseEditorModal from '../budget/PurchaseEditorModal';
 import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
 import PendingApprovalAnimation from '../animations/PendingApprovalAnimation';
 import { completeTask, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
@@ -117,6 +118,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     visible: boolean;
     taskName?: string;
   }>({ visible: false });
+  const [purchaseCompletionId, setPurchaseCompletionId] = useState<string | null>(null);
 
   const handleClaimTask = async (task: TaskWithAssignment) => {
     if (!user || task.status !== 'unassigned') return;
@@ -174,12 +176,17 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     setDetailModalTask(task);
   };
 
-  const handleCompleteTask = async (completionData: TaskCompletionData) => {
+  const handleCompleteTask = async (completionData: TaskCompletionData & { addPurchase?: boolean }) => {
     if (!completeModalTask) return;
 
     try {
       const result = await completeTask(completeModalTask.id, completionData);
-      
+
+      // Shopping task: user asked to record the purchase → open budget editor
+      if (completionData.addPurchase && result.completionId) {
+        setPurchaseCompletionId(result.completionId);
+      }
+
       if (result.requiresApproval) {
         // Show pending approval animation
         setPendingApprovalData({
@@ -814,6 +821,14 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         pointsEarned={celebrationData.pointsEarned || 0}
         streakCount={celebrationData.streakCount}
         onComplete={() => setCelebrationData({ visible: false })}
+      />
+
+      {/* Purchase editor for completed Shopping tasks */}
+      <PurchaseEditorModal
+        isOpen={!!purchaseCompletionId}
+        onClose={() => setPurchaseCompletionId(null)}
+        onSaved={() => {}}
+        taskCompletionId={purchaseCompletionId}
       />
 
       {/* Pending Approval Animation */}

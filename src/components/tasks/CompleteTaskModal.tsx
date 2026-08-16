@@ -53,6 +53,7 @@ interface TaskCompletionData {
   timeSpent?: number;
   notes?: string;
   proofPhotos?: File[];
+  addPurchase?: boolean; // Shopping tasks: open budget purchase editor after completion
 }
 
 interface CompleteTaskModalProps {
@@ -359,6 +360,26 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
                 </div>
               )}
             </motion.div>
+
+            {/* Shopping: offer to record the purchase in the budget */}
+            {task.task.category?.name === 'Shopping' && (
+              <motion.div variants={itemVariants}>
+                <label className="flex items-center gap-3 p-4 bg-teal-50 border border-teal-200 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={completionData.addPurchase || false}
+                    onChange={(e) => setCompletionData(prev => ({
+                      ...prev,
+                      addPurchase: e.target.checked
+                    }))}
+                    className="w-4 h-4 accent-teal-600"
+                  />
+                  <span className="text-sm font-medium text-teal-800">
+                    Add receipt from this trip to the budget
+                  </span>
+                </label>
+              </motion.div>
+            )}
 
             {/* Points Preview */}
             {isOverdue && (

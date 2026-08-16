@@ -19,6 +19,7 @@ interface PurchaseEditorModalProps {
   onClose: () => void;
   onSaved: () => void;
   purchase?: PurchaseWithItems | null; // null/undefined = create
+  taskCompletionId?: string | null; // link new purchase to a Shopping task completion
 }
 
 interface ItemRow {
@@ -37,6 +38,7 @@ const PurchaseEditorModal: React.FC<PurchaseEditorModalProps> = ({
   onClose,
   onSaved,
   purchase,
+  taskCompletionId,
 }) => {
   const { user } = useAuth();
   const { currentHousehold, members } = useHousehold();
@@ -169,6 +171,8 @@ const PurchaseEditorModal: React.FC<PurchaseEditorModalProps> = ({
       purchased_at: new Date(`${date}T12:00:00`).toISOString(),
       paid_by: paidBy,
       total_amount: isNaN(totalNum) ? Math.round(itemsSum * 100) / 100 : totalNum,
+      // only on create; updates leave the existing link untouched (field absent)
+      ...(!purchase && taskCompletionId ? { task_completion_id: taskCompletionId } : {}),
     };
 
     setLoading(true);

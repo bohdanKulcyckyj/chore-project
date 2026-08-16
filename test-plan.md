@@ -11,3 +11,7 @@
 - [ ] Add a new purchase after settling → balance reappears counting only the new one
 - [ ] This week / This month cards show Total / Mine / Shared (my part) matching the purchases you entered (week starts Monday)
 - [ ] Last 6 months chart: bars only in months that have purchases, stacked colors match the legend, hover tooltip shows per-person amounts
+- [ ] Complete a Shopping-category task with "Add receipt from this trip" checked → purchase editor opens (usable while/after the celebration animation), saved purchase shows the blue "Shopping task" badge on the Budget tab
+- [ ] Complete a Shopping task with the checkbox unchecked → no purchase editor, no purchase created
+- [ ] Complete a non-Shopping task → the receipt checkbox is not shown in the Complete Task modal
+- [ ] Cancel the purchase editor after completing → task stays completed, no purchase appears in Budget
