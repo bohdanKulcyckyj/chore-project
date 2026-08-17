@@ -54,19 +54,17 @@ const TaskManagement: React.FC = () => {
         throw tasksError;
       }
 
-      // Fetch assignments for these tasks, bounded to the next 7 days
-      // (recurring tasks materialize ~28 days of future rows we don't want here)
+      // Fetch all assignments for these tasks (materialization already caps
+      // recurring rows at ~28 days/task; the collapse below reduces each
+      // recurring task to a single row)
       const taskIds = allTasks?.map(t => t.id) || [];
       let assignments: Tables<'task_assignments'>[] = [];
-      let everAssignedTaskIds = new Set<string>();
 
       if (taskIds.length > 0) {
-        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const { data: assignmentData, error: assignmentError } = await supabase
           .from('task_assignments')
           .select('*')
           .in('task_id', taskIds)
-          .or(`due_datetime.lte.${sevenDaysFromNow},due_datetime.is.null`)
           .order('due_datetime', { ascending: true });
 
         if (assignmentError) {
@@ -74,31 +72,21 @@ const TaskManagement: React.FC = () => {
         }
 
         assignments = assignmentData || [];
-
-        // Unbounded lookup of which tasks have any assignment rows at all,
-        // so tasks with only far-future instances don't show as unassigned
-        const { data: assignedIds, error: assignedIdsError } = await supabase
-          .from('task_assignments')
-          .select('task_id')
-          .in('task_id', taskIds);
-
-        if (assignedIdsError) {
-          throw assignedIdsError;
-        }
-
-        everAssignedTaskIds = new Set(assignedIds?.map(a => a.task_id) || []);
       }
+      const everAssignedTaskIds = new Set(assignments.map(a => a.task_id));
 
-      // Collapse recurring tasks to their earliest non-completed assignment
-      // (rows are ordered asc by due_datetime, so first match wins)
-      const seenRecurring = new Set<string>();
+      // Collapse recurring tasks to one row: earliest non-completed instance,
+      // else the latest completed one (so the task stays visible as done).
+      // Rows are ordered asc by due_datetime.
+      const recurringRow = new Map<string, Tables<'task_assignments'>>();
       assignments = assignments.filter(assignment => {
         const task = allTasks?.find(t => t.id === assignment.task_id);
         if (!task || task.recurrence_type === 'none') return true;
-        if (assignment.status === 'completed' || seenRecurring.has(assignment.task_id)) return false;
-        seenRecurring.add(assignment.task_id);
-        return true;
-      });
+        const current = recurringRow.get(assignment.task_id);
+        if (current && current.status !== 'completed') return false;
+        recurringRow.set(assignment.task_id, assignment);
+        return false;
+      }).concat([...recurringRow.values()]);
 
       // Fetch user profiles for assigned users
       const userIds = [...new Set(assignments.map(a => a.assigned_to).filter(Boolean))];
@@ -303,7 +291,7 @@ const TaskManagement: React.FC = () => {
           <div className="text-2xl font-bold text-blue-600">
             {tasks.filter(t => t.status === 'pending').length}
           </div>
-          <div className="text-sm text-gray-500">Pending</div>
+          <div className="text-sm text-gray-500">Pending (upcoming)</div>
         </div>
         
         <div className="bg-white rounded-lg p-4 shadow-sm border">

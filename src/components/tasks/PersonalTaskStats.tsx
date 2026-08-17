@@ -165,7 +165,7 @@ const PersonalTaskStats: React.FC = () => {
     },
     {
       icon: Clock,
-      label: 'Pending',
+      label: 'Pending Today',
       value: stats.pendingTasks,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',

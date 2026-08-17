@@ -37,7 +37,6 @@ interface FormData {
   difficulty: 'easy' | 'medium' | 'hard';
   estimated_duration: number;
   points: number;
-  assignment_type: 'fixed' | 'rotating' | 'flexible';
   requires_approval: boolean;
   repeat: '' | 'DAILY' | 'WEEKLY' | 'MONTHLY'; // '' = does not repeat
   repeat_interval: number;
@@ -57,7 +56,6 @@ const emptyForm: FormData = {
   difficulty: 'medium',
   estimated_duration: 30,
   points: 10,
-  assignment_type: 'fixed',
   requires_approval: false,
   repeat: '',
   repeat_interval: 1,
@@ -177,7 +175,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
           difficulty: formData.difficulty,
           estimated_duration: formData.estimated_duration,
           points: formData.points,
-          assignment_type: formData.assignment_type,
+          assignment_type: isRecurring
+            ? (formData.rotation_members.length > 1 ? 'rotating' : 'fixed')
+            : (formData.assigned_to ? 'fixed' : 'flexible'),
           requires_approval: formData.requires_approval,
           created_by: user.id,
           recurrence_type: isRecurring
@@ -192,8 +192,17 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
       if (taskError) throw taskError;
 
       if (isRecurring) {
-        const count = await materializeTask(task, supabase);
-        toast.success(`Task created — ${count} occurrence${count === 1 ? '' : 's'} scheduled`);
+        try {
+          const count = await materializeTask(task, supabase);
+          if (count === 0) {
+            toast('Task created — no occurrences fall in the next 4 weeks');
+          } else {
+            toast.success(`Task created — ${count} occurrence${count === 1 ? '' : 's'} scheduled`);
+          }
+        } catch (err) {
+          // Task row exists; only scheduling failed — still close/refresh
+          toast.error(`Task created but scheduling failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
       } else {
         // Create the task assignment only if someone is assigned
         if (formData.assigned_to) {
@@ -343,7 +352,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                         <div>
                           <div className="border border-gray-300 rounded-xl p-3 space-y-2">
                             {householdMembers.map((member: HouseholdMember) => (
-                              <label key={member.user_id} className="flex items-center gap-3 cursor-pointer">
+                              <label key={member.user_id} className="flex items-center gap-3 cursor-pointer min-h-11">
                                 <input
                                   type="checkbox"
                                   checked={formData.rotation_members.includes(member.user_id)}
@@ -468,7 +477,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                                 key={label}
                                 type="button"
                                 onClick={() => handleInputChange('repeat_weekdays', toggleInList(formData.repeat_weekdays, i))}
-                                className={`px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                                className={`min-h-11 min-w-11 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
                                   formData.repeat_weekdays.includes(i)
                                     ? 'bg-blue-500 border-blue-500 text-white'
                                     : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
@@ -563,36 +572,18 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                   <div className="border-t border-gray-200 pt-6">
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Advanced Options</h3>
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Assignment Type */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Assignment Type
-                        </label>
-                        <select
-                          value={formData.assignment_type}
-                          onChange={(e) => handleInputChange('assignment_type', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
-                        >
-                          <option value="fixed">Fixed Assignment</option>
-                          <option value="rotating">Rotating Assignment</option>
-                          <option value="flexible">Flexible Assignment</option>
-                        </select>
-                      </div>
-
-                      {/* Requires Approval */}
-                      <div className="flex items-center space-x-3 pt-8">
-                        <input
-                          type="checkbox"
-                          id="requires_approval"
-                          checked={formData.requires_approval}
-                          onChange={(e) => handleInputChange('requires_approval', e.target.checked)}
-                          className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="requires_approval" className="text-sm font-medium text-gray-700">
-                          Requires approval when completed
-                        </label>
-                      </div>
+                    {/* Requires Approval */}
+                    <div className="flex items-center space-x-3 min-h-11">
+                      <input
+                        type="checkbox"
+                        id="requires_approval"
+                        checked={formData.requires_approval}
+                        onChange={(e) => handleInputChange('requires_approval', e.target.checked)}
+                        className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="requires_approval" className="text-sm font-medium text-gray-700">
+                        Requires approval when completed
+                      </label>
                     </div>
                   </div>
                 </div>

@@ -27,7 +27,7 @@ import TaskDetailModal from './TaskDetailModal';
 import PurchaseEditorModal from '../budget/PurchaseEditorModal';
 import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
 import PendingApprovalAnimation from '../animations/PendingApprovalAnimation';
-import { completeTask, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
+import { completeTask, isDueAfterToday, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
 
 // Shadcn UI Components
 import {
@@ -162,8 +162,13 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     toast('Reassign task functionality coming soon!', { icon: '🚧' });
   };
 
+  const isRecurring = (task: TaskWithAssignment) => task.task.recurrence_type !== 'none';
+  // Mirrors the completeTask guard: future recurring instances can't be completed yet
+  const canCompleteNow = (task: TaskWithAssignment) =>
+    task.status !== 'completed' && !(isRecurring(task) && isDueAfterToday(task.due_datetime));
+
   const handleMarkComplete = async (task: TaskWithAssignment) => {
-    if (!user || task.assigned_to !== user.id || task.status === 'completed') {
+    if (!user || task.assigned_to !== user.id || !canCompleteNow(task)) {
       toast.error('You cannot complete this task');
       return;
     }
@@ -353,7 +358,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
 
   const TaskActionsDropdown: React.FC<{ task: TaskWithAssignment }> = ({ task }) => {
     const { isAdmin } = useHousehold();
-    
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -392,7 +397,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
             </>
           ) : (
             <>
-              {(task.status !== 'completed' && (task.assigned_to === user?.id || isAdmin)) && (
+              {(canCompleteNow(task) && (task.assigned_to === user?.id || isAdmin)) && (
                 <DropdownMenuItem onClick={() => handleMarkComplete(task)}>
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Mark Complete
@@ -647,7 +652,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                       <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-900">
                         {assignment.due_datetime ?
-                          format(new Date(assignment.due_datetime), 'MMM dd, yyyy') :
+                          `${isRecurring(assignment) && assignment.status !== 'completed' ? 'Next: ' : ''}${format(new Date(assignment.due_datetime), 'MMM dd, yyyy')}` :
                           'No due date'
                         }
                       </span>
@@ -751,7 +756,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                   <span className="text-sm text-gray-900">
                     {assignment.due_datetime ?
-                      format(new Date(assignment.due_datetime), 'MMM dd') :
+                      `${isRecurring(assignment) && assignment.status !== 'completed' ? 'Next: ' : ''}${format(new Date(assignment.due_datetime), 'MMM dd')}` :
                       'No due date'
                     }
                   </span>

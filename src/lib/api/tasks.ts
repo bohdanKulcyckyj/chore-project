@@ -17,6 +17,14 @@ export interface TaskCompletionResult {
   completionId?: string; // set by completeTask; used to link a budget purchase
 }
 
+/** True when the due instant falls after the LOCAL end of today. */
+export function isDueAfterToday(dueDatetime: string | null | undefined, now = new Date()): boolean {
+  if (!dueDatetime) return false;
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  return new Date(dueDatetime) > endOfToday;
+}
+
 function daysBetween(dueDate: Date, completedDate: Date): number {
   // Set both dates to start of day for fair comparison
   const due = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
@@ -144,13 +152,13 @@ export async function completeTask(
     throw new Error('Task is already completed');
   }
 
-  // Guard against completing future materialized recurring instances early.
-  // All UI paths (task table, dashboard, calendar) route through here.
-  if (
-    assignment.due_datetime &&
-    new Date(assignment.due_datetime).getTime() - Date.now() > 24 * 60 * 60 * 1000
-  ) {
-    throw new Error("This task isn't due yet");
+  // Guard against completing future materialized recurring instances early
+  // (one-off tasks may be done any time). All UI paths route through here.
+  if (task.recurrence_type !== 'none' && isDueAfterToday(assignment.due_datetime)) {
+    const due = new Date(assignment.due_datetime!);
+    throw new Error(
+      `This chore isn't due until ${due.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}`
+    );
   }
 
   const completedAt = new Date();
