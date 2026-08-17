@@ -22,13 +22,27 @@ Calendar is currently non-functional. Key findings:
 - [MAJOR] TaskDetailModal commented out; realtime filter invalid; month range fetch wrong; completeTask farmable
 - vitest collects e2e/ Playwright specs; 68 pre-existing lint errors
 
-## Phase 2 — Implement (workflow, 6 agents, file-partitioned)
-- [ ] A: Migration (dedupe + UNIQUE(task_id,due_datetime), member INSERT policy) + RecurrencePattern types
-- [ ] B: rrule engine `src/lib/recurrence.ts` + materializer + top-up in useHousehold + tests + vitest e2e exclude
-- [ ] C: AddTaskModal — recurrence UI (native selects), fix points step, tz toISOString, materialize on create
-- [ ] D: Calendar overhaul — height, view switch/nav, query fix, realtime, modal wiring, filters, badges, cleanup
-- [ ] E: Surfaces — bounded fetches, per-task collapse, completeTask future-guard, fix due_date claim, delete TaskTableOld
-- [ ] F: Lint sweep (after A–E)
+## Phase 2 — Implement (workflow wf_3ad9f9ba, 6 agents, file-partitioned) ✅ → commits 964df49..be43c6e
+- [x] A: Migration (dedupe + UNIQUE(task_id,due_datetime), member INSERT policy) + RecurrencePattern types
+- [x] B: rrule engine `src/lib/recurrence.ts` + materializer + top-up in useHousehold + tests + vitest e2e exclude
+- [x] C: AddTaskModal — recurrence UI (native selects), fix points step, tz toISOString, materialize on create
+- [x] D: Calendar overhaul — height, view switch/nav, query fix, realtime, modal wiring, filters, badges, cleanup
+- [x] E: Surfaces — bounded fetches, per-task collapse, completeTask future-guard, fix due_date claim, delete TaskTableOld
+- [x] F: Lint sweep → 0 errors (13 warnings), tsc 0, 42/42 tests, build OK
 
-## Phase 3 — Verify (workflow): build + unit + Playwright E2E + adversarial diff review
-## Phase 4 — Fix findings, commit, PR
+## Phase 3 — Verify (workflow wf_db71f8e3, 45 agents: 4 review lenses → skeptics ∥ E2E) ✅
+E2E A–H passed live (grid, nav, timezone 15:00 correct, weekly materialization 8 rows + reload-idempotent,
+two-user round-robin rotation A/B/A/B, modal + completion, far-future rejection, table collapse, filters).
+I/J/K cut by rate limit. Confirmed findings:
+- BLOCKER weekly BYDAY compared against UTC weekday (wrong local day when time crosses UTC midnight; DST hour drift)
+- BLOCKER 24h completeTask guard unconditional → claim-then-complete (due now+7d) uncompletable; daily exploit at 20:01
+- BLOCKER supabase_realtime publication has zero tables → realtime never fires
+- MAJOR TaskManagement 7d bound + collapse → monthly/biweekly tasks vanish after completion; row mutates silently
+- MAJOR materializeTask swallows errors → "Task created — 0 occurrences" success toast
+- MAJOR Mark Complete shown to non-assignees; double-tap → double completion rows/points; stale fetch races
+- MAJOR calendar fetch errors invisible; migration dedupe cascades into task_completions
+- minor: overdue never derived, Assignment Type select contradicts rotation, <44px chips, first-occurrence-today drop,
+  duplicate "Pending" labels, dead calendar claim path, boundary-spanning events
+
+## Phase 4 — Fix + Re-verify (workflow wf_0fef71e0: 3 fixers → gates → E2E regression w/ mobile+realtime)
+## Phase 5 — Commit, PR
