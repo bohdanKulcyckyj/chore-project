@@ -2,8 +2,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import { EventClickArg, DatesSetArg, EventContentArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import { ChevronLeft, ChevronRight, Repeat, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 
 import { useHousehold } from '../../hooks/useHousehold';
 import { useCalendarData, TaskWithAssignment } from './hooks/useCalendarData';
@@ -11,10 +10,11 @@ import { useTaskActions } from './hooks/useTaskActions';
 import { useFullCalendarEvents } from './hooks/useFullCalendarEvents';
 import TaskDetailModal, { TaskWithAssignment as ModalTask } from '../tasks/TaskDetailModal';
 
+// ponytail: no hour grid — chores stack per day in due order (Google-Calendar-style chips)
 const FC_VIEWS = {
   month: 'dayGridMonth',
-  week: 'timeGridWeek',
-  day: 'timeGridDay',
+  week: 'dayGridWeek',
+  day: 'dayGridDay',
 } as const;
 type ViewType = keyof typeof FC_VIEWS;
 
@@ -72,19 +72,16 @@ const Calendar: React.FC = () => {
     [openTaskModal]
   );
 
+  // Single-line chip: "18:00 Title · Assignee". Day view has room for all of it;
+  // month/week columns are ~48px at 375px → 10px title only, extras from md up. No icons — every char counts.
   const renderEventContent = useCallback((arg: EventContentArg) => {
-    const { assignee, duration, recurring } = arg.event.extendedProps;
+    const isDay = arg.view.type === FC_VIEWS.day;
+    const extra = isDay ? '' : 'hidden md:inline';
     return (
-      <div className="px-1 overflow-hidden">
-        <div className="font-medium text-xs truncate">
-          {recurring && <Repeat className="inline w-3 h-3 mr-1 align-[-2px]" />}
-          {arg.event.title}
-        </div>
-        {assignee && (
-          <div className="text-xs truncate opacity-75">
-            {assignee}{duration ? ` • ${duration}min` : ''}
-          </div>
-        )}
+      <div className={`px-1 truncate leading-tight ${isDay ? 'text-xs' : 'text-[10px] md:text-xs'}`}>
+        <span className={`font-semibold mr-1 ${extra}`}>{arg.timeText}</span>
+        <span className="font-medium">{arg.event.title}</span>
+        <span className={`opacity-75 ${extra}`}> · {arg.event.extendedProps.assignee}</span>
       </div>
     );
   }, []);
@@ -193,28 +190,26 @@ const Calendar: React.FC = () => {
       )}
 
       {/* Grid */}
-      <div className="flex-1 min-h-0 p-2 md:p-4">
+      {/* text-sm on mobile shrinks day numbers/headers (FullCalendar inherits 1em) */}
+      <div className="flex-1 min-h-0 p-2 md:p-4 text-sm md:text-base">
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin]}
-          initialView="timeGridWeek"
+          plugins={[dayGridPlugin]}
+          initialView={FC_VIEWS.week}
           headerToolbar={false}
           height="100%"
           events={events}
           eventClick={handleEventClick}
           eventContent={renderEventContent}
           datesSet={handleDatesSet}
-          // Full-day slots so late/early tasks are never hidden
-          slotDuration="01:00:00"
-          scrollTime="07:00:00"
-          allDaySlot={true}
-          nowIndicator={true}
-          dayMaxEvents={3}
+          eventDisplay="block"
+          eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          // Point events: without this a 23:30 chore gets an implicit 1h end and spans two days
+          defaultTimedEventDuration="00:00:00"
+          // Fit as many chips as the row height allows, then "+N more" popover
+          dayMaxEvents={true}
           moreLinkClick="popover"
-          slotEventOverlap={false}
-          eventOrder="rank,start"
           firstDay={0}
-          slotLabelFormat={{ hour: 'numeric', minute: '2-digit', meridiem: 'short' }}
           // Compact headers so 375px doesn't overlap
           dayHeaderFormat={{ weekday: 'short', day: 'numeric' }}
           views={{ dayGridMonth: { dayHeaderFormat: { weekday: 'short' } } }}
