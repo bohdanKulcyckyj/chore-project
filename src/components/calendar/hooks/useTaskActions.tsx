@@ -1,6 +1,4 @@
-import { useState, useCallback } from 'react';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../hooks/useAuth';
+import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { completeTask as completeTaskApi } from '../../../lib/api/tasks';
 import { TaskWithAssignment } from './useCalendarData';
@@ -13,17 +11,18 @@ export interface TaskActionsState {
   closeTaskModal: () => void;
 
   // Task actions (return true on success)
-  claimTask: (task: TaskWithAssignment) => Promise<boolean>;
   completeTask: (task: TaskWithAssignment) => Promise<boolean>;
 
   actionLoading: boolean;
 }
 
 export const useTaskActions = (): TaskActionsState => {
-  const { user } = useAuth();
   const [selectedTask, setSelectedTask] = useState<TaskWithAssignment | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  // Sync guard: completeTaskApi is a non-atomic read-then-write, so a double
+  // tap before the state re-render would award points twice.
+  const inFlight = useRef(false);
 
   const openTaskModal = useCallback((task: TaskWithAssignment) => {
     setSelectedTask(task);
@@ -35,35 +34,10 @@ export const useTaskActions = (): TaskActionsState => {
     setIsModalOpen(false);
   }, []);
 
-  // Claim a task (set status to in_progress and assign to current user)
-  const claimTask = useCallback(async (task: TaskWithAssignment): Promise<boolean> => {
-    if (!user) {
-      toast.error('You must be logged in to claim tasks');
-      return false;
-    }
-
-    try {
-      setActionLoading(true);
-
-      const { error } = await supabase
-        .from('task_assignments')
-        .update({ status: 'in_progress', assigned_to: user.id })
-        .eq('id', task.id);
-
-      if (error) throw error;
-
-      toast.success('Task claimed successfully');
-      return true;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to claim task');
-      return false;
-    } finally {
-      setActionLoading(false);
-    }
-  }, [user]);
-
   // Complete a task via the shared API (points/streak/late-penalty logic lives there)
   const completeTask = useCallback(async (task: TaskWithAssignment): Promise<boolean> => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
     try {
       setActionLoading(true);
       const result = await completeTaskApi(task.id, {});
@@ -73,6 +47,7 @@ export const useTaskActions = (): TaskActionsState => {
       toast.error(err instanceof Error ? err.message : 'Failed to complete task');
       return false;
     } finally {
+      inFlight.current = false;
       setActionLoading(false);
     }
   }, []);
@@ -82,7 +57,6 @@ export const useTaskActions = (): TaskActionsState => {
     isModalOpen,
     openTaskModal,
     closeTaskModal,
-    claimTask,
     completeTask,
     actionLoading,
   };

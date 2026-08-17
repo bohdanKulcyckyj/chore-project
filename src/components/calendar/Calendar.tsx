@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import { EventClickArg, DatesSetArg, EventContentArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
-import { ChevronLeft, ChevronRight, Repeat } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Repeat, AlertCircle } from 'lucide-react';
 
 import { useHousehold } from '../../hooks/useHousehold';
 import { useCalendarData, TaskWithAssignment } from './hooks/useCalendarData';
@@ -39,7 +39,7 @@ const Calendar: React.FC = () => {
   const [title, setTitle] = useState('');
   const [range, setRange] = useState<{ start: Date; end: Date } | null>(null);
 
-  const { tasks, loading, filters, setFilters, refreshData } = useCalendarData(
+  const { tasks, loading, error, filters, setFilters, refreshData } = useCalendarData(
     range?.start ?? null,
     range?.end ?? null
   );
@@ -48,8 +48,8 @@ const Calendar: React.FC = () => {
     isModalOpen,
     openTaskModal,
     closeTaskModal,
-    claimTask,
     completeTask,
+    actionLoading,
   } = useTaskActions();
 
   const events = useFullCalendarEvents(tasks);
@@ -88,13 +88,6 @@ const Calendar: React.FC = () => {
       </div>
     );
   }, []);
-
-  const handleClaim = async () => {
-    if (selectedTask && (await claimTask(selectedTask))) {
-      closeTaskModal();
-      refreshData();
-    }
-  };
 
   const handleComplete = async () => {
     if (selectedTask && (await completeTask(selectedTask))) {
@@ -186,6 +179,19 @@ const Calendar: React.FC = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="mx-3 md:mx-4 mt-2 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1 min-w-0 truncate">Couldn't load tasks: {error}</span>
+          <button
+            onClick={() => refreshData()}
+            className="shrink-0 min-h-[44px] px-3 rounded-lg font-medium text-red-700 hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="flex-1 min-h-0 p-2 md:p-4">
         <FullCalendar
@@ -219,8 +225,8 @@ const Calendar: React.FC = () => {
         isOpen={isModalOpen}
         task={selectedTask ? toModalTask(selectedTask) : null}
         onClose={closeTaskModal}
-        onClaimTask={handleClaim}
         onMarkComplete={handleComplete}
+        isActionPending={actionLoading}
       />
     </div>
   );

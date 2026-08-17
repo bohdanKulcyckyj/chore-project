@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tables } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 import { getRecurrenceText, RecurrencePattern } from '../../lib/recurrence';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,8 @@ interface TaskDetailModalProps {
   onMarkComplete?: (task: TaskWithAssignment) => void;
   onEditTask?: (task: TaskWithAssignment) => void;
   onReassignTask?: (task: TaskWithAssignment) => void;
+  /** Disables action buttons while a claim/complete request is in flight */
+  isActionPending?: boolean;
 }
 
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -56,8 +59,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClaimTask,
   onMarkComplete,
   onEditTask,
-  onReassignTask
+  onReassignTask,
+  isActionPending = false
 }) => {
+  const { user } = useAuth();
   if (!task) return null;
 
   const getStatusIcon = (status: string) => {
@@ -319,14 +324,26 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <div className="border-t border-gray-200 p-6">
                 <div className="flex flex-wrap gap-3 justify-end">
                   {task.status === 'unassigned' && onClaimTask && (
-                    <Button onClick={() => onClaimTask(task)} className="bg-purple-500 hover:bg-purple-600">
+                    <Button
+                      onClick={() => onClaimTask(task)}
+                      disabled={isActionPending}
+                      className="bg-purple-500 hover:bg-purple-600 disabled:opacity-50"
+                    >
                       <UserPlus className="w-4 h-4 mr-2" />
                       Claim Task
                     </Button>
                   )}
                   
-                  {task.status !== 'completed' && task.status !== 'unassigned' && onMarkComplete && (
-                    <Button onClick={() => onMarkComplete(task)} className="bg-green-500 hover:bg-green-600">
+                  {/* Only the assignee can complete — the API rejects anyone else */}
+                  {task.status !== 'completed' &&
+                    task.status !== 'unassigned' &&
+                    onMarkComplete &&
+                    task.assigned_to === user?.id && (
+                    <Button
+                      onClick={() => onMarkComplete(task)}
+                      disabled={isActionPending}
+                      className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
+                    >
                       <CheckCircle className="w-4 h-4 mr-2" />
                       Mark Complete
                     </Button>
