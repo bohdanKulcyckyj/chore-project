@@ -57,7 +57,31 @@ describe('generateOccurrences', () => {
     const occ = generateOccurrences(pattern, WINDOW_START, new Date('2026-02-01T00:00:00Z'));
     expect(occ.length).toBeGreaterThan(0);
     occ.forEach(o => {
-      expect([1, 3, 5]).toContain(o.date.getUTCDay()); // Mon/Wed/Fri
+      expect([1, 3, 5]).toContain(o.date.getDay()); // Mon/Wed/Fri, local
+    });
+  });
+
+  it('weekly Mon 20:00 local yields Mondays at 20:00 local (any TZ)', () => {
+    const dtstart = new Date(2026, 0, 5, 20, 0); // Mon Jan 5 2026, 20:00 local
+    const pattern = buildPattern({ freq: 'WEEKLY', byweekday: [0], dtstart });
+    expect(pattern.rrule).toContain('BYDAY=MO');
+    const occ = generateOccurrences(pattern, dtstart, new Date(2026, 2, 1));
+    expect(occ).toHaveLength(8);
+    expect(occ[0].date.getTime()).toBe(dtstart.getTime());
+    occ.forEach(o => {
+      expect(o.date.getDay()).toBe(1);
+      expect(o.date.getHours()).toBe(20);
+    });
+  });
+
+  it('daily 21:00 local stays 21:00 local across a DST boundary', () => {
+    const dtstart = new Date(2026, 9, 20, 21, 0); // Oct 20 2026 (EU DST ends Oct 25, US Nov 1)
+    const pattern = buildPattern({ freq: 'DAILY', dtstart });
+    const occ = generateOccurrences(pattern, dtstart, new Date(2026, 10, 5));
+    expect(occ).toHaveLength(16);
+    occ.forEach(o => {
+      expect(o.date.getHours()).toBe(21);
+      expect(o.date.getMinutes()).toBe(0);
     });
   });
 
@@ -68,7 +92,7 @@ describe('generateOccurrences', () => {
     };
     const occ = generateOccurrences(pattern, WINDOW_START, new Date('2026-06-01T00:00:00Z'));
     expect(occ).toHaveLength(5); // Jan–May
-    occ.forEach(o => expect(o.date.getUTCDate()).toBe(15));
+    occ.forEach(o => expect(o.date.getDate()).toBe(15));
   });
 
   it('rotation index is absolute: same date => same assignee across windows', () => {

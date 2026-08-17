@@ -123,6 +123,7 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
       setHouseholds([]);
       setMembers([]);
       setLoading(false);
+      materializedHouseholds.current.clear();
     }
   }, [user]);
 
@@ -130,8 +131,11 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     fetchMembers();
     // Fire-and-forget: materialize recurring task assignments once per household per session
     if (currentHousehold && !materializedHouseholds.current.has(currentHousehold.id)) {
-      materializedHouseholds.current.add(currentHousehold.id);
-      void materializeHousehold(currentHousehold.id, supabase);
+      const id = currentHousehold.id;
+      // Mark done only on success so a failed attempt is retried next time
+      void materializeHousehold(id, supabase).then(ok => {
+        if (ok) materializedHouseholds.current.add(id);
+      });
     }
   }, [currentHousehold]);
 

@@ -3,7 +3,12 @@
 -- 3) let any household member insert assignments (rotation materializer).
 
 -- 1) Dedupe rows sharing (task_id, due_datetime) where due_datetime IS NOT NULL.
--- Keep the earliest assigned_at (tie-break by id); delete the rest.
+-- Keep the earliest assigned_at (tie-break by id); delete the rest — but ONLY
+-- duplicates with no task_completions (task_completions.assignment_id cascades,
+-- so deleting a completed row would destroy completion/points history).
+-- If a conflicting pair with history survives, the ADD CONSTRAINT below fails
+-- loudly; the operator must resolve those rows manually (merge/re-point the
+-- completions, then delete) rather than have this migration silently drop them.
 DELETE FROM task_assignments
 WHERE id IN (
   SELECT id FROM (
@@ -16,6 +21,9 @@ WHERE id IN (
     WHERE due_datetime IS NOT NULL
   ) ranked
   WHERE rn > 1
+)
+AND NOT EXISTS (
+  SELECT 1 FROM task_completions tc WHERE tc.assignment_id = task_assignments.id
 );
 
 -- 2) Unique occurrence key used by the client materializer's upsert
