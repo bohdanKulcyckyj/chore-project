@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { useHousehold } from '../../hooks/useHousehold';
 import TaskApprovalInterface from '../admin/TaskApprovalInterface';
 import AdminGuard from '../auth/AdminGuard';

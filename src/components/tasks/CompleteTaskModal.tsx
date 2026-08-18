@@ -1,12 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Camera, 
-  Upload, 
-  Trash2, 
-  Clock, 
-  Star,
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import {
+  Camera,
+  Trash2,
+  Clock,
   CheckCircle,
   Loader2,
   ImageIcon
@@ -26,35 +23,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-import { Tables } from '../../lib/supabase';
+import { daysBetween, TaskCompletionData as ApiCompletionData, TaskWithAssignment } from '../../lib/api/tasks';
+import { DATE_FMT } from '../../lib/utils';
 
-type TaskWithAssignment = {
-  id: string;
-  task: Tables<'tasks'> & {
-    category?: Tables<'task_categories'>;
-  };
-  assigned_to?: string;
-  assigned_user?: Tables<'user_profiles'>;
-  due_datetime?: string;
-  status: string;
-  assigned_at?: string;
-  assigned_by?: string;
-};
-
-interface TaskCompletionData {
-  timeSpent?: number;
-  notes?: string;
-  proofPhotos?: File[];
-  addPurchase?: boolean; // Shopping tasks: open budget purchase editor after completion
-}
+// Shopping tasks: addPurchase opens the budget purchase editor after completion (UI-only, not sent to the API)
+type TaskCompletionData = ApiCompletionData & { addPurchase?: boolean };
 
 interface CompleteTaskModalProps {
   isOpen: boolean;
@@ -152,13 +126,13 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Error completing task:', error);
-      toast.error('Failed to complete task');
+      toast.error(error instanceof Error ? error.message : 'Failed to complete task');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const modalVariants = {
+  const modalVariants: Variants = {
     hidden: { 
       opacity: 0, 
       scale: 0.8, 
@@ -184,22 +158,14 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
     }
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0 }
   };
 
   if (!task) return null;
 
-  const daysOverdue = task.due_datetime ? (() => {
-    const due = new Date(task.due_datetime);
-    const now = new Date();
-    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const diffTime = nowDay.getTime() - dueDay.getTime();
-    return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-  })() : 0;
-  
+  const daysOverdue = task.due_datetime ? daysBetween(new Date(task.due_datetime), new Date()) : 0;
   const isOverdue = daysOverdue > 0;
 
   return (
@@ -247,7 +213,7 @@ const CompleteTaskModal: React.FC<CompleteTaskModalProps> = ({
                 )}
                 {task.due_datetime && (
                   <Badge variant={isOverdue ? 'destructive' : 'secondary'}>
-                    Due: {format(new Date(task.due_datetime), 'MMM dd, yyyy')}
+                    Due: {format(new Date(task.due_datetime), DATE_FMT)}
                     {isOverdue && ` (${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue)`}
                   </Badge>
                 )}

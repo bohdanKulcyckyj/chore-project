@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { 
   Star, 
   Trophy, 
@@ -122,7 +122,7 @@ const TaskCompletionCelebration: React.FC<TaskCompletionCelebrationProps> = ({
     return <Star className="w-8 h-8" />;
   };
 
-  const celebrationVariants = {
+  const celebrationVariants: Variants = {
     hidden: { opacity: 0, scale: 0.8 },
     visible: { 
       opacity: 1, 
@@ -140,7 +140,7 @@ const TaskCompletionCelebration: React.FC<TaskCompletionCelebrationProps> = ({
     }
   };
 
-  const confettiVariants = {
+  const confettiVariants: Variants = {
     hidden: { y: -10, opacity: 0 },
     visible: { 
       y: "100vh", 
@@ -153,7 +153,7 @@ const TaskCompletionCelebration: React.FC<TaskCompletionCelebrationProps> = ({
     }
   };
 
-  const pulseVariants = {
+  const pulseVariants: Variants = {
     pulse: {
       scale: [1, 1.2, 1],
       transition: {

@@ -17,13 +17,161 @@ export interface TaskCompletionResult {
   completionId?: string; // set by completeTask; used to link a budget purchase
 }
 
-function daysBetween(dueDate: Date, completedDate: Date): number {
+/** Canonical joined assignment row shared by every task surface (Tasks page, dashboard, calendar). */
+export type TaskWithAssignment = Omit<Tables<'task_assignments'>, 'status' | 'assigned_to'> & {
+  /** 'unassigned' is UI-only: TaskManagement synthesizes never-assigned tasks as `id: 'unassigned-<taskId>'`. */
+  status: Tables<'task_assignments'>['status'] | 'unassigned';
+  assigned_to: string | null;
+  task: Tables<'tasks'> & { category?: Tables<'task_categories'> | null };
+  assigned_user?: Pick<Tables<'user_profiles'>, 'id' | 'display_name' | 'avatar_url'> | null;
+  task_completions?: Tables<'task_completions'>[];
+};
+
+/** Embed used by fetchAssignments; `!inner` so `.eq('task.household_id', …)` drops parent rows. */
+export const ASSIGNMENT_SELECT = '*, task:tasks!inner(*, category:task_categories(*))';
+
+const toIso = (d: Date | string): string => (typeof d === 'string' ? d : d.toISOString());
+
+/** Household-scoped assignment rows with task+category embedded, ordered by due_datetime. Throws on error. */
+export async function fetchAssignments(opts: {
+  householdId: string;
+  assignedTo?: string;
+  /** inclusive */
+  from?: Date | string;
+  /** exclusive */
+  to?: Date | string;
+  withCompletions?: boolean;
+  order?: 'asc' | 'desc';
+}): Promise<TaskWithAssignment[]> {
+  const select: string = opts.withCompletions ? `${ASSIGNMENT_SELECT}, task_completions(*)` : ASSIGNMENT_SELECT;
+  let q = supabase.from('task_assignments').select(select).eq('task.household_id', opts.householdId);
+  if (opts.assignedTo) q = q.eq('assigned_to', opts.assignedTo);
+  if (opts.from) q = q.gte('due_datetime', toIso(opts.from));
+  if (opts.to) q = q.lt('due_datetime', toIso(opts.to));
+  const { data, error } = await q.order('due_datetime', { ascending: opts.order !== 'desc' });
+  if (error) throw error;
+  return (data ?? []) as unknown as TaskWithAssignment[];
+}
+
+/**
+ * Assignment rows for the given tasks. Recurring tasks gain a row per occurrence forever, so only
+ * their rows from the last `recentDays` are fetched (PostgREST max_rows=1000 would silently truncate);
+ * one-off tasks keep every row so an old completed one-off doesn't reappear as claimable. Ordered asc.
+ */
+export async function fetchAssignmentsForTasks(
+  tasks: Pick<Tables<'tasks'>, 'id' | 'recurrence_type'>[],
+  recentDays = 30
+): Promise<Tables<'task_assignments'>[]> {
+  if (tasks.length === 0) return [];
+  const cutoff = new Date(Date.now() - recentDays * 24 * 60 * 60 * 1000).toISOString();
+  const oneOffIds = tasks.filter(t => t.recurrence_type === 'none').map(t => t.id);
+  let q = supabase.from('task_assignments').select('*').in('task_id', tasks.map(t => t.id));
+  // PostgREST rejects `in.()` with an empty list
+  q = oneOffIds.length
+    ? q.or(`task_id.in.(${oneOffIds.join(',')}),due_datetime.gte.${cutoff}`)
+    : q.gte('due_datetime', cutoff);
+  const { data, error } = await q.order('due_datetime', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+const isOpen = (status: string): boolean => status === 'pending' || status === 'in_progress';
+
+/**
+ * The "current" occurrence of a recurring task: the latest open row due by the end of today
+ * (today's, or the most recent overdue one — still completable), else the earliest open future
+ * row, else the latest closed (completed/skipped) row. Rows may be in any order.
+ */
+export function pickCurrentOccurrence<T extends { status: string; due_datetime: string | null }>(
+  rows: T[],
+  now = new Date()
+): T | undefined {
+  const t = (r: T) => (r.due_datetime ? new Date(r.due_datetime).getTime() : 0);
+  const latest = (rs: T[]) => rs.reduce((a, b) => (t(b) > t(a) ? b : a));
+  const earliest = (rs: T[]) => rs.reduce((a, b) => (t(b) < t(a) ? b : a));
+  const open = rows.filter(r => isOpen(r.status));
+  const dueNow = open.filter(r => !isDueAfterToday(r.due_datetime, now));
+  if (dueNow.length) return latest(dueNow);
+  if (open.length) return earliest(open);
+  return rows.length ? latest(rows) : undefined;
+}
+
+/** Resolve `assigned_user` from `useHousehold().members` (no FK task_assignments→user_profiles, so no embed). */
+export function attachAssignees<T extends { assigned_to: string | null }>(
+  rows: T[],
+  members: { user_id: string; user_profile?: TaskWithAssignment['assigned_user'] }[]
+): (T & { assigned_user: TaskWithAssignment['assigned_user'] })[] {
+  const profileById = new Map(members.map(m => [m.user_id, m.user_profile ?? null]));
+  return rows.map(r => ({ ...r, assigned_user: (r.assigned_to && profileById.get(r.assigned_to)) || null }));
+}
+
+/** True when the due instant falls after the LOCAL end of today. */
+export function isDueAfterToday(dueDatetime: string | null | undefined, now = new Date()): boolean {
+  if (!dueDatetime) return false;
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  return new Date(dueDatetime) > endOfToday;
+}
+
+/** Whole local calendar days from due to completed (0 = same day or early). Drives points scoring. */
+export function daysBetween(dueDate: Date, completedDate: Date): number {
   // Set both dates to start of day for fair comparison
   const due = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
   const completed = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
-  
+
   const diffTime = completed.getTime() - due.getTime();
-  return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  // round, not ceil: a DST fall-back day is 25h and must still count as 1 day
+  return Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+}
+
+/** Overdue = still open (pending/in_progress) and due DATE before today's local date — same day rule as scoring. */
+export function isOverdue(a: { status: string; due_datetime: string | null }, now = new Date()): boolean {
+  if (!a.due_datetime || (a.status !== 'pending' && a.status !== 'in_progress')) return false;
+  return daysBetween(new Date(a.due_datetime), now) > 0;
+}
+
+/** Display status: the stored status, or 'overdue' (never written to the DB). */
+export function deriveStatus<S extends string>(a: { status: S; due_datetime: string | null }, now = new Date()): S | 'overdue' {
+  return isOverdue(a, now) ? 'overdue' : a.status;
+}
+
+/**
+ * Why `a` cannot be completed by `userId` right now (null = allowed): assignee only, not completed,
+ * recurring instances not before their due day. The single source of the messages completeTask throws.
+ */
+export function completionBlocker(
+  a: { status: string; assigned_to: string | null; due_datetime: string | null; task: { recurrence_type: string } },
+  userId: string | undefined,
+  now = new Date()
+): string | null {
+  if (!userId || a.assigned_to !== userId) return 'You are not assigned to this task';
+  if (a.status === 'completed') return 'Task is already completed';
+  if (a.task.recurrence_type !== 'none' && isDueAfterToday(a.due_datetime, now)) {
+    const due = new Date(a.due_datetime!);
+    return `This chore isn't due until ${due.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}`;
+  }
+  return null;
+}
+
+/** Mirrors completeTask's guards (see completionBlocker); use for "Mark Complete" affordances. */
+export function canCompleteNow(
+  a: Parameters<typeof completionBlocker>[0],
+  userId: string | undefined,
+  now = new Date()
+): boolean {
+  return completionBlocker(a, userId, now) === null;
+}
+
+/** Self-claim an unassigned task: pending, due in 7 days, assigned_by = claimer (matches the member INSERT policy). */
+export async function claimTask(taskId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('task_assignments').insert({
+    task_id: taskId,
+    assigned_to: userId,
+    due_datetime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    assigned_by: userId,
+    status: 'pending',
+  });
+  if (error) throw error;
 }
 
 function calculateTaskCompletion(
@@ -90,7 +238,7 @@ async function uploadPhotos(
     const fileName = `${completionId}-${index}.${fileExt}`;
     const filePath = `${householdId}/${taskId}/${completionId}/${fileName}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('task-completion-photos')
       .upload(filePath, photo, {
         cacheControl: '3600',
@@ -134,15 +282,11 @@ export async function completeTask(
   }
 
   const task = assignment.task as Tables<'tasks'>;
-  
-  // Verify user can complete this task
-  if (assignment.assigned_to !== user.id) {
-    throw new Error('You are not assigned to this task');
-  }
 
-  if (assignment.status === 'completed') {
-    throw new Error('Task is already completed');
-  }
+  // Assignee only, not already completed, no early completion of future recurring
+  // instances (one-off tasks may be done any time). All UI paths route through here.
+  const blocked = completionBlocker({ ...assignment, task }, user.id);
+  if (blocked) throw new Error(blocked);
 
   const completedAt = new Date();
   const dueDate = assignment.due_datetime ? new Date(assignment.due_datetime) : null;
@@ -164,7 +308,20 @@ export async function completeTask(
     };
   }
 
-  // Create completion record
+  // Compare-and-set the status FIRST so two tabs/devices can't both complete:
+  // only the request that flips it away from 'completed' proceeds.
+  // ponytail: no transaction (client-side); a DB function is the upgrade path.
+  const { data: claimed, error: claimError } = await supabase
+    .from('task_assignments')
+    .update({ status: 'completed' })
+    .eq('id', assignmentId)
+    .neq('status', 'completed')
+    .select('id');
+
+  if (claimError) throw claimError;
+  if (!claimed?.length) throw new Error('Task is already completed');
+
+  // Create completion record; on failure, best-effort revert the status
   const { data: completion, error: completionError } = await supabase
     .from('task_completions')
     .insert({
@@ -179,51 +336,37 @@ export async function completeTask(
     .select('id')
     .single();
 
-  if (completionError) throw completionError;
+  if (completionError) {
+    await supabase.from('task_assignments').update({ status: assignment.status }).eq('id', assignmentId);
+    throw completionError;
+  }
   const completionId = completion.id;
-
-  // Update assignment status
-  const { error: updateError } = await supabase
-    .from('task_assignments')
-    .update({ status: 'completed' })
-    .eq('id', assignmentId);
-
-  if (updateError) throw updateError;
 
   // Update user points only if approved (or doesn't require approval)
   if (!task.requires_approval) {
-    // Get household_id
-    const { data: householdData } = await supabase
-      .from('household_members')
-      .select('household_id')
+    // Get current user points
+    const { data: currentPoints } = await supabase
+      .from('user_points')
+      .select('total_points, current_streak, longest_streak, tasks_completed')
       .eq('user_id', user.id)
+      .eq('household_id', task.household_id)
       .single();
 
-    if (householdData) {
-      // Get current user points
-      const { data: currentPoints } = await supabase
-        .from('user_points')
-        .select('total_points, current_streak, longest_streak, tasks_completed')
-        .eq('user_id', user.id)
-        .eq('household_id', householdData.household_id)
-        .single();
+    if (currentPoints) {
+      const newStreak = completionResult.maintainsStreak ? currentPoints.current_streak + 1 : 0;
 
-      if (currentPoints) {
-        const newStreak = completionResult.maintainsStreak ? currentPoints.current_streak + 1 : 0;
-        
-        await supabase
-          .from('user_points')
-          .update({
-            total_points: currentPoints.total_points + completionResult.points,
-            current_streak: newStreak,
-            longest_streak: Math.max(currentPoints.longest_streak, newStreak),
-            tasks_completed: currentPoints.tasks_completed + 1,
-            last_activity: completedAt.toISOString(),
-            updated_at: completedAt.toISOString()
-          })
-          .eq('user_id', user.id)
-          .eq('household_id', householdData.household_id);
-      }
+      await supabase
+        .from('user_points')
+        .update({
+          total_points: currentPoints.total_points + completionResult.points,
+          current_streak: newStreak,
+          longest_streak: Math.max(currentPoints.longest_streak, newStreak),
+          tasks_completed: currentPoints.tasks_completed + 1,
+          last_activity: completedAt.toISOString(),
+          updated_at: completedAt.toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('household_id', task.household_id);
     }
   }
 
@@ -231,27 +374,18 @@ export async function completeTask(
   let photoUrls: string[] = [];
   if (completionData.proofPhotos?.length) {
     try {
-      // Get household_id from user profile or assignment
-      const { data: householdData } = await supabase
-        .from('household_members')
-        .select('household_id')
-        .eq('user_id', user.id)
-        .single();
+      photoUrls = await uploadPhotos(
+        completionData.proofPhotos,
+        task.household_id,
+        task.id,
+        completionId
+      );
 
-      if (householdData) {
-        photoUrls = await uploadPhotos(
-          completionData.proofPhotos,
-          householdData.household_id,
-          task.id,
-          completionId
-        );
-
-        // Update completion record with photo URLs
-        await supabase
-          .from('task_completions')
-          .update({ proof_urls: photoUrls })
-          .eq('id', completionId);
-      }
+      // Update completion record with photo URLs
+      await supabase
+        .from('task_completions')
+        .update({ proof_urls: photoUrls })
+        .eq('id', completionId);
     } catch (photoError) {
       console.error('Photo upload failed:', photoError);
       // Don't fail the entire completion for photo upload issues

@@ -2,18 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
+import { attachAssignees, fetchAssignments, TaskWithAssignment } from '../../lib/api/tasks';
 import { motion } from 'framer-motion';
-import { 
-  Home, 
-  Trophy, 
-  Flame, 
-  CheckCircle, 
-  Clock, 
-  Star,
-  TrendingUp,
-  Calendar,
-  Users,
-  Target
+import {
+  Trophy,
+  Flame,
+  CheckCircle,
+  Star
 } from 'lucide-react';
 import StatsCard from './StatsCard';
 import QuickActions from './QuickActions';
@@ -21,16 +16,11 @@ import TodaysTasks from './TodaysTasks';
 import HouseholdOverview from './HouseholdOverview';
 
 type UserPoints = Tables<'user_points'>;
-type TaskAssignment = Tables<'task_assignments'>;
 
 interface DashboardStats {
   personalStats: UserPoints | null;
-  todaysTasks: (TaskAssignment & { 
-    task: Tables<'tasks'>;
-    assigned_user?: Tables<'user_profiles'>;
-  })[];
+  todaysTasks: TaskWithAssignment[];
   completedToday: number;
-  pendingTasks: number;
   householdRank: number;
   totalMembers: number;
 }
@@ -42,7 +32,6 @@ const Dashboard: React.FC = () => {
     personalStats: null,
     todaysTasks: [],
     completedToday: 0,
-    pendingTasks: 0,
     householdRank: 0,
     totalMembers: 0,
   });
@@ -62,35 +51,16 @@ const Dashboard: React.FC = () => {
         .eq('household_id', currentHousehold.id)
         .single();
 
-      // Fetch today's tasks
+      // Today's tasks in THIS household (local day)
       const today = new Date();
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
-      
-      const { data: assignments } = await supabase
-        .from('task_assignments')
-        .select(`
-          *,
-          task:tasks(*)
-        `)
-        .eq('assigned_to', user.id)
-        .gte('due_datetime', todayStart)
-        .lt('due_datetime', todayEnd);
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      const todaysTasks = attachAssignees(
+        await fetchAssignments({ householdId: currentHousehold.id, assignedTo: user.id, from: todayStart, to: todayEnd }),
+        members
+      );
 
-      // Fetch user profiles for the household
-      const { data: userProfiles } = await supabase
-        .from('user_profiles')
-        .select('*');
-
-      // Combine the data
-      const todaysTasks = assignments?.map(assignment => ({
-        ...assignment,
-        assigned_user: userProfiles?.find(user => user.id === assignment.assigned_to)
-      })) || [];
-
-      // Calculate completed today
-      const completedToday = todaysTasks?.filter(t => t.status === 'completed').length || 0;
-      const pendingTasks = todaysTasks?.filter(t => t.status === 'pending').length || 0;
+      const completedToday = todaysTasks.filter(t => t.status === 'completed').length;
 
       // Calculate household rank
       const { data: allPoints } = await supabase
@@ -99,13 +69,12 @@ const Dashboard: React.FC = () => {
         .eq('household_id', currentHousehold.id)
         .order('total_points', { ascending: false });
 
-      const userRank = allPoints?.findIndex(p => p.user_id === user.id) + 1 || 0;
+      const userRank = (allPoints ?? []).findIndex(p => p.user_id === user.id) + 1;
 
       setStats({
         personalStats: personalStats || null,
-        todaysTasks: todaysTasks || [],
+        todaysTasks,
         completedToday,
-        pendingTasks,
         householdRank: userRank,
         totalMembers: members.length,
       });

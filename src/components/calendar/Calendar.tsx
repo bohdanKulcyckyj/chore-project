@@ -1,226 +1,221 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import FullCalendar from '@fullcalendar/react';
-import { EventClickArg, DateSelectArg, DatesSetArg } from '@fullcalendar/core';
+import { EventClickArg, DatesSetArg, EventContentArg, DayHeaderContentArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import { format } from 'date-fns';
+import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 
+import { useHousehold } from '../../hooks/useHousehold';
+import { TaskWithAssignment } from '../../lib/api/tasks';
+import { TIME_FMT } from '../../lib/utils';
 import { useCalendarData } from './hooks/useCalendarData';
-import { useCalendarView, CalendarViewType } from './hooks/useCalendarView';
-import { useTaskActions } from './hooks/useTaskActions';
-import { useFilteredFullCalendarEvents } from './hooks/useFullCalendarEvents';
+import { useFullCalendarEvents } from './hooks/useFullCalendarEvents';
+import TaskDetailModal from '../tasks/TaskDetailModal';
+import { useTaskCompletion } from '../tasks/useTaskCompletion';
 
-// We'll create these components next
-// import CustomEventContent from './components/CustomEventContent';
-// import CalendarHeader from './CalendarHeader';
-// import CalendarFilters from './CalendarFilters';
+// ponytail: no hour grid — chores stack per day in due order (Google-Calendar-style chips)
+const FC_VIEWS = {
+  month: 'dayGridMonth',
+  week: 'dayGridWeek',
+  day: 'dayGridDay',
+} as const;
+type ViewType = keyof typeof FC_VIEWS;
 
-// For now, let's import the existing task detail modal
-// import TaskDetailModal from '../tasks/TaskDetailModal';
+// Module-level renderers: FullCalendar compares options by reference, so inline
+// literals/closures would make it re-process options on every render.
+
+// Week/day: "Mon 17" (compact for 375px; ICU's own order is "17 Mon"). Month keeps FC's default "Mon".
+const renderDayHeader = (a: DayHeaderContentArg) =>
+  a.view.type === FC_VIEWS.month ? a.text : format(a.date, 'EEE d');
+
+// Single-line chip: "18:00 Title · Assignee". Day view has room for all of it;
+// month/week columns are ~48px at 375px → 10px title only, extras from md up. No icons — every char counts.
+const renderEventContent = (arg: EventContentArg) => {
+  const isDay = arg.view.type === FC_VIEWS.day;
+  const extra = isDay ? '' : 'hidden md:inline';
+  return (
+    <div className={`px-1 truncate leading-tight ${isDay ? 'text-xs' : 'text-[10px] md:text-xs'}`}>
+      <span className={`font-semibold mr-1 ${extra}`}>{arg.event.start && format(arg.event.start, TIME_FMT)}</span>
+      <span className="font-medium">{arg.event.title}</span>
+      <span className={`opacity-75 ${extra}`}> · {arg.event.extendedProps.assignee}</span>
+    </div>
+  );
+};
 
 const Calendar: React.FC = () => {
   const calendarRef = useRef<FullCalendar>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const { members } = useHousehold();
 
-  // Use our existing Phase 2 hooks
-  const { viewType, setCurrentDate, setViewType, dateRange } = useCalendarView();
-  const { tasks, loading, filters } = useCalendarData(dateRange.start, dateRange.end);
-  const { openTaskModal } = useTaskActions();
+  // FullCalendar is the source of truth for view + visible range (via datesSet)
+  const [viewType, setViewType] = useState<ViewType>('week');
+  const [title, setTitle] = useState('');
+  const [range, setRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskWithAssignment | null>(null);
 
-  // Transform tasks to FullCalendar events with filtering
-  const events = useFilteredFullCalendarEvents(tasks, filters);
+  const { tasks, loading, error, filters, setFilters, refreshData } = useCalendarData(
+    range?.start ?? null,
+    range?.end ?? null
+  );
+  // Same completion flow as the Tasks page (proof/notes/celebration/purchase editor)
+  const { startCompletion, modals } = useTaskCompletion({ onCompleted: () => { setSelectedTask(null); refreshData(); } });
 
-  // Event interaction handlers (memoized for performance)
-  const handleEventClick = useCallback((clickInfo: EventClickArg) => {
-    const task = clickInfo.event.extendedProps.task;
-    openTaskModal(task);
-  }, [openTaskModal]);
+  const events = useFullCalendarEvents(tasks);
 
-  const handleDateClick = useCallback((dateClickInfo: { dateStr: string }) => {
-    // Future: Could open "create task" modal here
-    console.log('Date clicked:', dateClickInfo.dateStr);
+  const getApi = () => calendarRef.current?.getApi();
+
+  // FullCalendar only re-measures on window resize, and does so mid sidebar
+  // transition (stale inner width after crossing md) — re-measure whenever the wrapper settles.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => calendarRef.current?.getApi().updateSize());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  const handleDateSelect = useCallback((selectInfo: DateSelectArg) => {
-    // Future: Handle date range selection for creating tasks
-    console.log('Date range selected:', selectInfo.startStr, selectInfo.endStr);
-
-    // Unselect after handling
-    const calendarApi = calendarRef.current?.getApi();
-    calendarApi?.unselect();
-  }, []);
-
-  // Navigation callback
-  const handleDatesSet = useCallback((dateInfo: DatesSetArg) => {
-    setCurrentDate(dateInfo.start);
-  }, [setCurrentDate]);
-
-  // Convert our view types to FullCalendar view types
-  const getFullCalendarView = (viewType: CalendarViewType): string => {
-    switch (viewType) {
-      case 'day': return 'timeGridDay';
-      case 'week': return 'timeGridWeek';
-      case 'month': return 'dayGridMonth';
-      default: return 'timeGridWeek';
-    }
-  };
-
-  // Temporary event content renderer (we'll replace with CustomEventContent)
-  const renderEventContent = useCallback((eventInfo: { event: { title: string; extendedProps: { assignee: string; duration: number } } }) => {
-    const { event } = eventInfo;
-    const assignee = event.extendedProps.assignee;
-    const duration = event.extendedProps.duration;
-
-    return (
-      <div className="p-1">
-        <div className="font-medium text-sm truncate">
-          {event.title}
-        </div>
-        {assignee && (
-          <div className="text-xs text-gray-600 truncate">
-            {assignee} {duration ? `• ${duration}min` : ''}
-          </div>
-        )}
-      </div>
+  const handleDatesSet = useCallback((info: DatesSetArg) => {
+    setTitle(info.view.title);
+    setRange({ start: info.start, end: info.end });
+    const entry = (Object.entries(FC_VIEWS) as [ViewType, string][]).find(
+      ([, fcView]) => fcView === info.view.type
     );
+    if (entry) setViewType(entry[0]);
   }, []);
+
+  const handleEventClick = useCallback((clickInfo: EventClickArg) => {
+    setSelectedTask(clickInfo.event.extendedProps.task as TaskWithAssignment);
+  }, []);
+
 
   return (
-    <div className="calendar-container h-full flex flex-col bg-white">
-      {/* Temporary header - we'll replace with CalendarHeader */}
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Household Calendar</h1>
+    <div className="calendar-container h-[calc(100dvh-5rem)] md:h-dvh flex flex-col bg-white">
+      {/* Header */}
+      <div className="p-3 md:p-4 border-b border-gray-200 bg-white space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Calendar</h1>
 
-          {/* Temporary view switcher */}
+          {/* View switcher */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewType('month')}
-              className={`px-3 py-1 text-sm rounded ${
-                viewType === 'month'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Month
-            </button>
-            <button
-              onClick={() => setViewType('week')}
-              className={`px-3 py-1 text-sm rounded ${
-                viewType === 'week'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setViewType('day')}
-              className={`px-3 py-1 text-sm rounded ${
-                viewType === 'day'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Day
-            </button>
+            {(Object.keys(FC_VIEWS) as ViewType[]).map(type => (
+              <button
+                key={type}
+                onClick={() => getApi()?.changeView(FC_VIEWS[type])}
+                className={`px-3 py-1.5 text-sm rounded capitalize ${
+                  viewType === type
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {type}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Task count */}
-        <p className="text-sm text-gray-600 mt-2">
-          {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-          {loading && ' • Loading...'}
-        </p>
+        {/* Navigation + title */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => getApi()?.prev()}
+              aria-label="Previous"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => getApi()?.next()}
+              aria-label="Next"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => getApi()?.today()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Today
+            </button>
+          </div>
+          <h2 className="text-sm md:text-base font-semibold text-gray-900 text-right">
+            {title}
+            {loading && <span className="ml-2 text-xs font-normal text-gray-400">Loading…</span>}
+          </h2>
+        </div>
+
+        {/* Filters (text-base on mobile: iOS zooms on focus below 16px) */}
+        <div className="flex items-center gap-2">
+          <select
+            value={filters.memberId}
+            onChange={e => setFilters({ memberId: e.target.value })}
+            className="flex-1 min-w-0 text-base md:text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700"
+          >
+            <option value="">All members</option>
+            {members.map(m => (
+              <option key={m.user_id} value={m.user_id}>
+                {m.user_profile?.display_name || 'Unknown'}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.status}
+            onChange={e => setFilters({ status: e.target.value })}
+            className="flex-1 min-w-0 text-base md:text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700"
+          >
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In progress</option>
+            <option value="completed">Completed</option>
+            <option value="overdue">Overdue</option>
+          </select>
+        </div>
       </div>
 
-      {/* FullCalendar Component */}
-      <div className="flex-1 overflow-hidden p-4">
+      {error && (
+        <div className="mx-3 md:mx-4 mt-2 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1 min-w-0 truncate">Couldn't load tasks: {error}</span>
+          <button
+            onClick={() => refreshData()}
+            className="shrink-0 min-h-[44px] px-3 rounded-lg font-medium text-red-700 hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Grid */}
+      {/* text-sm on mobile shrinks day numbers/headers (FullCalendar inherits 1em) */}
+      <div ref={gridRef} className="flex-1 min-h-0 p-2 md:p-4 text-sm md:text-base">
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-
-          // View Configuration
-          initialView={getFullCalendarView(viewType)}
-          headerToolbar={false} // We use custom header
+          plugins={[dayGridPlugin]}
+          initialView={FC_VIEWS.week}
+          headerToolbar={false}
           height="100%"
-
-          // Events
           events={events}
           eventClick={handleEventClick}
-          dateClick={handleDateClick}
-          select={handleDateSelect}
-
-          // Custom Rendering (uses React portals internally)
           eventContent={renderEventContent}
-
-          // Navigation callbacks
           datesSet={handleDatesSet}
-
-          // Time Configuration
-          slotMinTime="06:00:00"
-          slotMaxTime="22:00:00"
-          slotDuration="01:00:00"
-          allDaySlot={true}
-
-          // Event Display & Overflow (KEY FEATURE!)
-          aspectRatio={window.innerWidth < 768 ? 1.2 : 1.8}
           eventDisplay="block"
-          dayMaxEvents={3} // Show max 3 events, then "+X more"
-          moreLinkClick="popover" // Built-in overflow handling!
-
-          // Interaction
-          selectable={true}
-          selectMirror={true}
-          unselectAuto={true}
-
-          // Week/Day specific
-          slotLabelFormat={{
-            hour: 'numeric',
-            minute: '2-digit',
-            meridiem: 'short'
-          }}
-
-          // Event ordering (critical for task priority)
-          eventOrder="start,-duration,allDay,title"
-
-          // Loading callback (not a boolean)
-          loading={(isLoading: boolean) => {
-            // Loading state is handled by the component
-            console.log('Calendar loading:', isLoading);
-          }}
-
-          // Weekend handling
-          weekends={true}
-
-          // First day of week
-          firstDay={0} // Sunday = 0, Monday = 1
-
-          // Event overlap and stacking (key for multiple tasks)
-          slotEventOverlap={false} // Prevents visual overlap in time slots
-          eventOverlap={false} // Prevents event overlap conflicts
-
-          // Responsive
-          nowIndicator={true} // Show current time line
-          scrollTime="08:00:00" // Scroll to 8am by default
-
-          // Styling
-          dayHeaderFormat={{ weekday: 'short', month: 'numeric', day: 'numeric' }}
+          // Point events: without this a 23:30 chore gets an implicit 1h end and spans two days
+          defaultTimedEventDuration="00:00:00"
+          // Fit as many chips as the row height allows, then "+N more" jumps to the day view
+          // (FC's popover sits at z-index 9999, above TaskDetailModal, and only closes on outside mousedown)
+          dayMaxEvents={true}
+          moreLinkClick="day"
+          firstDay={0}
+          dayHeaderContent={renderDayHeader}
         />
       </div>
 
-      {/* Task Detail Modal - Temporarily commented until we import it properly */}
-      {/*
-      {isModalOpen && selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          onClose={closeTaskModal}
-          onStatusUpdate={(newStatus) => {
-            // Handle optimistic update
-            closeTaskModal();
-          }}
-        />
-      )}
-      */}
+      <TaskDetailModal
+        isOpen={!!selectedTask}
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onMarkComplete={startCompletion}
+      />
+      {modals}
     </div>
   );
 };

@@ -2,44 +2,22 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
 import { format } from 'date-fns';
-import { Tables } from '../../lib/supabase';
+import { deriveStatus, TaskWithAssignment } from '../../lib/api/tasks';
+import { STATUS_STYLE } from '../../lib/taskStyles';
+import { TIME_FMT } from '../../lib/utils';
+import { Badge } from '@/components/ui/badge';
 import TaskDetailModal from '../tasks/TaskDetailModal';
 
-type TaskAssignment = Tables<'task_assignments'> & { 
-  task: Tables<'tasks'> & {
-    category?: Tables<'task_categories'>;
-  };
-  assigned_user?: Tables<'user_profiles'>;
-};
-
 interface TodaysTasksProps {
-  tasks: TaskAssignment[];
+  tasks: TaskWithAssignment[];
   onTaskUpdate: () => void;
 }
 
-const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
-  const [detailModalTask, setDetailModalTask] = useState<TaskAssignment | null>(null);
+const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks }) => {
+  const [detailModalTask, setDetailModalTask] = useState<TaskWithAssignment | null>(null);
 
-  const handleTaskClick = (task: TaskAssignment) => {
+  const handleTaskClick = (task: TaskWithAssignment) => {
     setDetailModalTask(task);
-  };
-
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'overdue':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'skipped':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'pending':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
   };
 
   return (
@@ -86,15 +64,15 @@ const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks, onTaskUpdate }) => {
                   <span>{assignment.task.estimated_duration} min</span>
                   <span>{assignment.task.points} points</span>
                   {assignment.due_datetime && (
-                    <span>Due: {format(new Date(assignment.due_datetime), 'h:mm a')}</span>
+                    <span>Due: {format(new Date(assignment.due_datetime), TIME_FMT)}</span>
                   )}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                  {assignment.status.replace('_', ' ')}
-                </span>
+                <Badge variant="outline" className={STATUS_STYLE[deriveStatus(assignment)].tw}>
+                  {deriveStatus(assignment).replace('_', ' ')}
+                </Badge>
                 {assignment.status === 'pending' && (
                   <motion.button
                     whileHover={{ scale: 1.05 }}

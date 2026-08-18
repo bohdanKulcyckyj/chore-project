@@ -4,6 +4,7 @@ import { User, CheckCircle, Clock, Star, TrendingUp, Calendar } from 'lucide-rea
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
+import { fetchAssignments, isDueAfterToday } from '../../lib/api/tasks';
 
 interface PersonalStats {
   totalCompletedTasks: number;
@@ -45,36 +46,28 @@ const PersonalTaskStats: React.FC = () => {
         .eq('household_id', currentHousehold.id)
         .single();
 
-      // Get user's task assignments
-      const { data: assignments } = await supabase
-        .from('task_assignments')
-        .select(`
-          *,
-          task:tasks(*),
-          task_completions(*)
-        `)
-        .eq('assigned_to', user.id)
-        .eq('task.household_id', currentHousehold.id);
-
-      // Calculate current assignments status
-      const pendingTasks = assignments?.filter(a => a.status === 'pending').length || 0;
-      const inProgressTasks = assignments?.filter(a => a.status === 'in_progress').length || 0;
-
-      // Calculate time-based stats
       const now = new Date();
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      const completedAssignments = assignments?.filter(a => a.status === 'completed') || [];
-      const tasksThisWeek = completedAssignments.filter(a => 
-        new Date(a.assigned_at) >= oneWeekAgo
-      ).length;
-      const tasksThisMonth = completedAssignments.filter(a => 
-        new Date(a.assigned_at) >= oneMonthAgo
-      ).length;
+      // Bounded to rows due in the last month (recurring rows accumulate forever; PostgREST caps at 1000).
+      // ponytail: a row due >30 days ago but completed this month is not counted — rare (late by >1 day = penalty).
+      const assignments = await fetchAssignments({
+        householdId: currentHousehold.id,
+        assignedTo: user.id,
+        from: oneMonthAgo,
+        withCompletions: true,
+      });
 
-      // Calculate average completion time from task_completions
-      const completions = assignments?.flatMap(a => a.task_completions || []) || [];
+      // Current status, excluding future materialized recurring instances (due by end of today, or undated)
+      const pendingTasks = assignments.filter(a => a.status === 'pending' && !isDueAfterToday(a.due_datetime)).length;
+      const inProgressTasks = assignments.filter(a => a.status === 'in_progress' && !isDueAfterToday(a.due_datetime)).length;
+
+      // Time-based stats keyed on when the work was actually done (assigned_at = materialization batch time)
+      const completions = assignments.flatMap(a => a.task_completions ?? []);
+      const tasksThisWeek = completions.filter(c => new Date(c.completed_at) >= oneWeekAgo).length;
+      const tasksThisMonth = completions.filter(c => new Date(c.completed_at) >= oneMonthAgo).length;
+
       const totalTime = completions.reduce((sum, c) => sum + (c.time_spent || 0), 0);
       const averageCompletionTime = completions.length > 0 ? Math.round(totalTime / completions.length) : 0;
 
@@ -159,7 +152,7 @@ const PersonalTaskStats: React.FC = () => {
     },
     {
       icon: Clock,
-      label: 'Pending',
+      label: 'Pending Today',
       value: stats.pendingTasks,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',
