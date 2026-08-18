@@ -123,8 +123,25 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   };
 
   // Archive = tasks.is_active -> false; TaskManagement only fetches is_active tasks, so the row disappears.
+  // Recurring tasks are materialized up to 28 days ahead, so is_active alone leaves those occurrences
+  // on the calendar. Drop the not-yet-started future ones too; past and completed rows stay for history.
   const handleArchiveTask = async (task: TaskWithAssignment) => {
-    if (!confirm(`Archive "${task.task.name}"? It will be hidden from the task list.`)) return;
+    const now = new Date().toISOString();
+    let warning = '';
+    if (task.task.recurrence_type !== 'none') {
+      // Count first so the prompt states the real blast radius, not a vague "some".
+      const { count } = await supabase
+        .from('task_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', task.task.id)
+        .in('status', ['pending', 'in_progress'])
+        .gte('due_datetime', now);
+      warning =
+        count && count > 0
+          ? `\n\nThis is a repeating task. ${count} scheduled occurrence${count === 1 ? '' : 's'} will be removed from the calendar, and no new ones will be created. Completed occurrences are kept.`
+          : '\n\nThis is a repeating task. No new occurrences will be created. Completed occurrences are kept.';
+    }
+    if (!confirm(`Archive "${task.task.name}"? It will be hidden from the task list.${warning}`)) return;
 
     const { error } = await supabase.from('tasks').update({ is_active: false }).eq('id', task.task.id);
     if (error) {
@@ -132,6 +149,21 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
       toast.error('Failed to archive task');
       return;
     }
+
+    const { error: cleanupError } = await supabase
+      .from('task_assignments')
+      .delete()
+      .eq('task_id', task.task.id)
+      .in('status', ['pending', 'in_progress'])
+      .gte('due_datetime', now);
+    if (cleanupError) {
+      // Task is archived either way; only the calendar cleanup failed.
+      console.error('Error clearing future occurrences:', cleanupError);
+      toast.error('Task archived, but future occurrences could not be removed');
+      onTaskUpdate?.();
+      return;
+    }
+
     toast.success('Task archived');
     onTaskUpdate?.();
   };
