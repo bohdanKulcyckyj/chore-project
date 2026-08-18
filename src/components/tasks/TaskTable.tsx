@@ -24,7 +24,7 @@ import toast from 'react-hot-toast';
 import TaskDetailModal from './TaskDetailModal';
 import AddTaskModal from './AddTaskModal';
 import { useTaskCompletion } from './useTaskCompletion';
-import { canCompleteNow, claimTask, deriveStatus, isDueAfterToday, TaskWithAssignment } from '../../lib/api/tasks';
+import { claimTask, completionBlocker, deriveStatus, isDueAfterToday, TaskWithAssignment } from '../../lib/api/tasks';
 import { DIFFICULTY_STYLE, STATUS_STYLE } from '../../lib/taskStyles';
 import { DATE_FMT } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
@@ -329,12 +329,21 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
             </>
           ) : (
             <>
-              {canCompleteNow(task, user?.id) && (
-                <DropdownMenuItem onClick={() => startCompletion(task)}>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Mark Complete
-                </DropdownMenuItem>
-              )}
+              {/* Blocked rows keep the item but disabled, with the reason as its label —
+                  startCompletion() toasts the same message if it is somehow clicked. */}
+              {(() => {
+                const blocker = completionBlocker(task, user?.id);
+                return blocker ? (
+                  <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                    {blocker}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => startCompletion(task)}>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Mark Complete
+                  </DropdownMenuItem>
+                );
+              })()}
               {isAdmin && (
                 <>
                   <DropdownMenuItem onClick={() => handleEditTask(task)}>

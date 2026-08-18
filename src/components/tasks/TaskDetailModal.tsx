@@ -20,7 +20,7 @@ import {
 import { format } from 'date-fns';
 import { useAuth } from '../../hooks/useAuth';
 import { getRecurrenceText, RecurrencePattern } from '../../lib/recurrence';
-import { canCompleteNow, deriveStatus, TaskWithAssignment } from '../../lib/api/tasks';
+import { completionBlocker, deriveStatus, TaskWithAssignment } from '../../lib/api/tasks';
 import { DIFFICULTY_STYLE, STATUS_STYLE } from '../../lib/taskStyles';
 import { DATE_FMT, DATE_TIME_FMT } from '../../lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +56,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const status = deriveStatus(task);
   const completion = task.task_completions?.[0];
+  // null = completable; otherwise the reason, shown in place of the button.
+  const blocker = completionBlocker(task, user?.id);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -294,16 +296,21 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </Button>
                   )}
                   
-                  {/* Same guards as the API: assignee only, not completed, no future recurring occurrence */}
-                  {onMarkComplete && canCompleteNow(task, user?.id) && (
-                    <Button
-                      onClick={() => onMarkComplete(task)}
-                      disabled={isActionPending}
-                      className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Mark Complete
-                    </Button>
+                  {/* Same guards as the API (assignee only, not completed, lead window on recurring).
+                      When blocked, show the reason instead of nothing — a missing button reads as a bug. */}
+                  {onMarkComplete && task.status !== 'unassigned' && (
+                    blocker ? (
+                      <p className="text-sm text-gray-500 self-center text-right">{blocker}</p>
+                    ) : (
+                      <Button
+                        onClick={() => onMarkComplete(task)}
+                        disabled={isActionPending}
+                        className="bg-green-500 hover:bg-green-600 disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Mark Complete
+                      </Button>
+                    )
                   )}
                   
                   {onEditTask && (

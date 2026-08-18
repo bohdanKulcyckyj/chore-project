@@ -53,6 +53,7 @@ import {
   fetchAssignments,
   fetchAssignmentsForTasks,
   isDueAfterToday,
+  isDueBeyondLeadWindow,
   isOverdue,
   pickCurrentOccurrence,
   ASSIGNMENT_SELECT,
@@ -126,7 +127,27 @@ describe('canCompleteNow', () => {
     expect(completionBlocker({ ...base, task: { recurrence_type: 'none' } }, 'u1', now)).toBeNull();
     expect(completionBlocker({ ...base, task: { recurrence_type: 'none' } }, 'u2', now)).toBe('You are not assigned to this task');
     expect(completionBlocker({ ...base, status: 'completed', task: { recurrence_type: 'none' } }, 'u1', now)).toBe('Task is already completed');
-    expect(completionBlocker({ ...base, task: { recurrence_type: 'weekly' } }, 'u1', now)).toMatch(/^This chore isn't due until /);
+    expect(completionBlocker({ ...base, task: { recurrence_type: 'weekly' } }, 'u1', now)).toMatch(/^You can complete this from /);
+  });
+
+  // Lead window: a recurring chore opens COMPLETION_LEAD_DAYS before its due day, so people can
+  // cook dinner / do the shopping a day early without being able to farm a month of occurrences.
+  it('recurring occurrences open one day early, and no earlier', () => {
+    const recurring = (due: string) => ({ ...base, due_datetime: due, task: { recurrence_type: 'weekly' } });
+    // now = Aug 17 20:01 -> due Aug 18 (tomorrow) is inside the window
+    expect(canCompleteNow(recurring(local(2026, 7, 18, 9)), 'u1', now)).toBe(true);
+    expect(canCompleteNow(recurring(new Date(2026, 7, 18, 23, 59).toISOString()), 'u1', now)).toBe(true);
+    // Aug 19 and beyond stay blocked
+    expect(canCompleteNow(recurring(new Date(2026, 7, 19, 0, 0, 0, 1).toISOString()), 'u1', now)).toBe(false);
+    expect(canCompleteNow(recurring(local(2026, 7, 20, 9)), 'u1', now)).toBe(false);
+    // the message names the day it unlocks (due Aug 20 -> opens Aug 19), not the due day
+    expect(completionBlocker(recurring(local(2026, 7, 20, 9)), 'u1', now)).toContain('Aug 19');
+  });
+
+  it('isDueBeyondLeadWindow honours an explicit window and ignores undated rows', () => {
+    expect(isDueBeyondLeadWindow(null, now)).toBe(false);
+    expect(isDueBeyondLeadWindow(local(2026, 7, 20, 9), now, 0)).toBe(true);
+    expect(isDueBeyondLeadWindow(local(2026, 7, 20, 9), now, 3)).toBe(false);
   });
 });
 

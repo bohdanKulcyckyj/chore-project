@@ -121,6 +121,27 @@ export function isDueAfterToday(dueDatetime: string | null | undefined, now = ne
   return new Date(dueDatetime) > endOfToday;
 }
 
+/**
+ * How many days early a recurring chore may be completed. Recurring occurrences are materialized
+ * 28 days ahead, so *some* limit is needed or a user could tap through a month of dinners in one
+ * sitting and farm the points; but a hard "not before the due day" block is too blunt — people
+ * genuinely cook dinner or do the shopping a day early.
+ */
+export const COMPLETION_LEAD_DAYS = 1;
+
+/** True when the due instant is further out than the lead window allows (local day granularity). */
+export function isDueBeyondLeadWindow(
+  dueDatetime: string | null | undefined,
+  now = new Date(),
+  leadDays = COMPLETION_LEAD_DAYS
+): boolean {
+  if (!dueDatetime) return false;
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() + leadDays);
+  cutoff.setHours(23, 59, 59, 999);
+  return new Date(dueDatetime) > cutoff;
+}
+
 /** Whole local calendar days from due to completed (0 = same day or early). Drives points scoring. */
 export function daysBetween(dueDate: Date, completedDate: Date): number {
   // Set both dates to start of day for fair comparison
@@ -154,9 +175,12 @@ export function completionBlocker(
 ): string | null {
   if (!userId || a.assigned_to !== userId) return 'You are not assigned to this task';
   if (a.status === 'completed') return 'Task is already completed';
-  if (a.task.recurrence_type !== 'none' && isDueAfterToday(a.due_datetime, now)) {
-    const due = new Date(a.due_datetime!);
-    return `This chore isn't due until ${due.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}`;
+  if (a.task.recurrence_type !== 'none' && isDueBeyondLeadWindow(a.due_datetime, now)) {
+    // Name the day it unlocks, not the due day — "come back later" without a date is useless.
+    const opensAt = new Date(a.due_datetime!);
+    opensAt.setDate(opensAt.getDate() - COMPLETION_LEAD_DAYS);
+    const day = opensAt.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    return `You can complete this from ${day}`;
   }
   return null;
 }
