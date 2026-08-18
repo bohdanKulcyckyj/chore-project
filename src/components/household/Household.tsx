@@ -47,18 +47,32 @@ const Household: React.FC = () => {
     }
   };
 
-  const handleRoleChange = async (memberId: string, newRole: 'admin' | 'member') => {
-    if (!isAdmin || memberId === user?.id) return;
+  // Fast client-side check for a friendly toast; a DB trigger enforces it for real
+  // (migration 20260818120000), since the client is not a trust boundary.
+  const isLastAdmin = (member: HouseholdMemberWithProfile) =>
+    member.role === 'admin' && members.filter(m => m.role === 'admin').length <= 1;
 
+  const handleRoleChange = async (member: HouseholdMemberWithProfile, newRole: 'admin' | 'member') => {
+    if (!isAdmin || member.user_id === user?.id) return;
+    if (newRole === 'member' && isLastAdmin(member)) {
+      toast.error('Household must keep at least one admin');
+      return;
+    }
+
+    const memberId = member.id;
     setUpdatingMemberId(memberId);
 
     try {
-      const { error } = await supabase
+      // .select() so RLS blocking the write surfaces as 0 rows; without it PostgREST
+      // returns 204 either way and a silently-denied update looks like success.
+      const { data, error } = await supabase
         .from('household_members')
         .update({ role: newRole })
-        .eq('id', memberId);
+        .eq('id', memberId)
+        .select('id');
 
       if (error) throw error;
+      if (!data?.length) throw new Error('Update was not permitted');
 
       toast.success(`Member role updated to ${newRole}`);
       await refreshData();
@@ -70,22 +84,29 @@ const Household: React.FC = () => {
     }
   };
 
-  const handleRemoveMember = async (memberId: string, memberName: string) => {
-    if (!isAdmin || memberId === user?.id) return;
+  const handleRemoveMember = async (member: HouseholdMemberWithProfile, memberName: string) => {
+    if (!isAdmin || member.user_id === user?.id) return;
+    if (isLastAdmin(member)) {
+      toast.error('Household must keep at least one admin');
+      return;
+    }
 
     if (!confirm(`Are you sure you want to remove ${memberName} from the household?`)) {
       return;
     }
 
+    const memberId = member.id;
     setUpdatingMemberId(memberId);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('household_members')
         .delete()
-        .eq('id', memberId);
+        .eq('id', memberId)
+        .select('id');
 
       if (error) throw error;
+      if (!data?.length) throw new Error('Delete was not permitted');
 
       toast.success(`${memberName} has been removed from the household`);
       await refreshData();
@@ -113,14 +134,14 @@ const Household: React.FC = () => {
       <DropdownMenuContent align="end">
         {member.role === 'member' ? (
           <DropdownMenuItem 
-            onClick={() => handleRoleChange(member.id, 'admin')}
+            onClick={() => handleRoleChange(member, 'admin')}
           >
             <UserCheck className="mr-2 h-4 w-4" />
             Make Admin
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem 
-            onClick={() => handleRoleChange(member.id, 'member')}
+            onClick={() => handleRoleChange(member, 'member')}
           >
             <Users className="mr-2 h-4 w-4" />
             Make Member
@@ -128,7 +149,7 @@ const Household: React.FC = () => {
         )}
         <DropdownMenuItem 
           onClick={() => handleRemoveMember(
-            member.id, 
+            member,
             member.user_profile?.display_name || 'this member'
           )}
           className="text-destructive"
