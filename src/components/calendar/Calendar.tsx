@@ -100,7 +100,12 @@ const Calendar: React.FC = () => {
             {(Object.keys(FC_VIEWS) as ViewType[]).map(type => (
               <button
                 key={type}
-                onClick={() => getApi()?.changeView(FC_VIEWS[type])}
+                // Land on today when it's on screen, else keep the anchor (browsing March stays in March)
+                onClick={() => {
+                  const now = new Date();
+                  const inView = range && now >= range.start && now < range.end;
+                  getApi()?.changeView(FC_VIEWS[type], inView ? now : undefined);
+                }}
                 className={`px-3 py-1.5 text-sm rounded capitalize ${
                   viewType === type
                     ? 'bg-white text-gray-900 shadow-sm'

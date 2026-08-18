@@ -22,10 +22,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import toast from 'react-hot-toast';
 import TaskDetailModal from './TaskDetailModal';
+import AddTaskModal from './AddTaskModal';
 import { useTaskCompletion } from './useTaskCompletion';
 import { canCompleteNow, claimTask, deriveStatus, isDueAfterToday, TaskWithAssignment } from '../../lib/api/tasks';
 import { DIFFICULTY_STYLE, STATUS_STYLE } from '../../lib/taskStyles';
 import { DATE_FMT } from '../../lib/utils';
+import { supabase } from '../../lib/supabase';
 
 // Shadcn UI Components
 import {
@@ -81,7 +83,9 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   onTaskUpdate 
 }) => {
   const { user } = useAuth();
+  const { members } = useHousehold();
   const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
+  const [reassignTask, setReassignTask] = useState<TaskWithAssignment | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<FilterState>({
     status: '__all__',
@@ -94,6 +98,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
   });
   const [showFilters, setShowFilters] = useState(false);
   const [detailModalTask, setDetailModalTask] = useState<TaskWithAssignment | null>(null);
+  const [editTask, setEditTask] = useState<TaskWithAssignment['task'] | null>(null);
   const { startCompletion, modals: completionModals } = useTaskCompletion({ onCompleted: onTaskUpdate });
 
   const handleClaimTask = async (task: TaskWithAssignment) => {
@@ -113,17 +118,47 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     }
   };
 
-  // Placeholder handlers for new actions
-  const handleEditTask = async (_task: TaskWithAssignment) => {
-    toast('Edit task functionality coming soon!', { icon: '🚧' });
+  const handleEditTask = async (task: TaskWithAssignment) => {
+    setEditTask(task.task);
   };
 
-  const handleArchiveTask = async (_task: TaskWithAssignment) => {
-    toast('Archive task functionality coming soon!', { icon: '🚧' });
+  // Archive = tasks.is_active -> false; TaskManagement only fetches is_active tasks, so the row disappears.
+  const handleArchiveTask = async (task: TaskWithAssignment) => {
+    if (!confirm(`Archive "${task.task.name}"? It will be hidden from the task list.`)) return;
+
+    const { error } = await supabase.from('tasks').update({ is_active: false }).eq('id', task.task.id);
+    if (error) {
+      console.error('Error archiving task:', error);
+      toast.error('Failed to archive task');
+      return;
+    }
+    toast.success('Task archived');
+    onTaskUpdate?.();
   };
 
-  const handleReassignTask = async (_task: TaskWithAssignment) => {
-    toast('Reassign task functionality coming soon!', { icon: '🚧' });
+  // ponytail: native <select> in a plain overlay, no new modal component / dependency.
+  const handleReassignTask = async (task: TaskWithAssignment) => {
+    // 'unassigned' rows are UI-only placeholders with no task_assignments row — claim instead.
+    if (task.status === 'unassigned') {
+      toast.error('Task is unassigned — claim it instead');
+      return;
+    }
+    setReassignTask(task);
+  };
+
+  const submitReassign = async (task: TaskWithAssignment, userId: string) => {
+    const { error } = await supabase
+      .from('task_assignments')
+      .update({ assigned_to: userId, assigned_by: user?.id ?? null })
+      .eq('id', task.id);
+    setReassignTask(null);
+    if (error) {
+      console.error('Error reassigning task:', error);
+      toast.error('Failed to reassign task');
+      return;
+    }
+    toast.success('Task reassigned');
+    onTaskUpdate?.();
   };
 
   // "Next:" only for a recurring occurrence that is still in the future
@@ -272,7 +307,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 <>
                   <DropdownMenuItem onClick={() => handleEditTask(task)}>
                     <Edit3 className="mr-2 h-4 w-4" />
-                    Edit Assignment
+                    Edit Task
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleReassignTask(task)}>
                     <UserPlus className="mr-2 h-4 w-4" />
@@ -676,6 +711,46 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         onEditTask={handleEditTask}
         onReassignTask={handleReassignTask}
       />
+
+      {/* Reassign picker */}
+      {reassignTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          onClick={() => setReassignTask(null)}
+        >
+          <div className="w-full sm:max-w-sm bg-white rounded-2xl p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-900">Reassign "{reassignTask.task.name}"</h3>
+            <select
+              className="w-full h-11 rounded-lg border border-gray-300 px-3 text-base bg-white"
+              defaultValue={reassignTask.assigned_to ?? ''}
+              onChange={(e) => e.target.value && submitReassign(reassignTask, e.target.value)}
+            >
+              <option value="">Select a member…</option>
+              {members.map(m => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.user_profile?.display_name || 'Unknown'}
+                </option>
+              ))}
+            </select>
+            <Button variant="outline" className="w-full" onClick={() => setReassignTask(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit task (reuses AddTaskModal in edit mode) */}
+      {editTask && (
+        <AddTaskModal
+          isOpen={!!editTask}
+          task={editTask}
+          onClose={() => setEditTask(null)}
+          onTaskCreated={() => {
+            setEditTask(null);
+            onTaskUpdate?.();
+          }}
+        />
+      )}
 
       {/* Complete modal + celebration / pending-approval / purchase editor */}
       {completionModals}

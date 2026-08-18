@@ -27,6 +27,10 @@ interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTaskCreated: () => void;
+  /** Present = edit mode. ponytail: edit covers metadata only (name, description,
+   * category, difficulty, duration, points, approval); recurrence/assignment edits
+   * need re-materialization of occurrences, add when asked. */
+  task?: Tables<'tasks'>;
 }
 
 interface FormData {
@@ -65,21 +69,31 @@ const emptyForm: FormData = {
   rotation_members: [],
 };
 
-const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCreated }) => {
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCreated, task }) => {
   const { user } = useAuth();
   const { currentHousehold, members: householdMembers } = useHousehold();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Tables<'task_categories'>[]>([]);
   const [formData, setFormData] = useState<FormData>(emptyForm);
+  const isEdit = !!task;
 
   // Fetch categories on mount
   useEffect(() => {
     if (isOpen) {
       fetchCategories();
-      // Reset form when modal opens
-      setFormData(emptyForm);
+      // Reset form when modal opens (prefill from the task row in edit mode)
+      setFormData(task ? {
+        ...emptyForm,
+        name: task.name,
+        description: task.description || '',
+        category_id: task.category_id || '',
+        difficulty: task.difficulty,
+        estimated_duration: task.estimated_duration,
+        points: task.points,
+        requires_approval: task.requires_approval,
+      } : emptyForm);
     }
-  }, [isOpen]);
+  }, [isOpen, task]);
 
   const fetchCategories = async () => {
     try {
@@ -131,9 +145,11 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     if (formData.name.trim().length < 3) return 'Task name must be at least 3 characters';
     if (!formData.category_id) return 'Please select a category';
     // Assignment is now optional - removed assigned_to validation
-    if (!formData.due_datetime) return 'Please set a due date';
     if (formData.estimated_duration <= 0) return 'Duration must be greater than 0';
     if (formData.points <= 0) return 'Points must be greater than 0';
+    // Edit mode never touches scheduling, so skip every due-date/recurrence rule
+    if (isEdit) return null;
+    if (!formData.due_datetime) return 'Please set a due date';
     if (isRecurring) {
       if (formData.repeat_interval < 1) return 'Repeat interval must be at least 1';
       if (formData.rotation_members.length === 0) return 'Select at least one member for the rotation';
@@ -168,8 +184,29 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     setLoading(true);
 
     try {
+      if (task) {
+        const { error } = await supabase
+          .from('tasks')
+          .update({
+            name: formData.name.trim(),
+            description: formData.description.trim(),
+            category_id: formData.category_id || null,
+            difficulty: formData.difficulty,
+            estimated_duration: formData.estimated_duration,
+            points: formData.points,
+            requires_approval: formData.requires_approval,
+          })
+          .eq('id', task.id);
+
+        if (error) throw error;
+        toast.success('Task updated successfully!');
+        onTaskCreated();
+        onClose();
+        return;
+      }
+
       // Create the task
-      const { data: task, error: taskError } = await supabase
+      const { data: newTask, error: taskError } = await supabase
         .from('tasks')
         .insert({
           household_id: currentHousehold.id,
@@ -197,7 +234,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
 
       if (isRecurring) {
         try {
-          const count = await materializeTask(task, supabase);
+          const count = await materializeTask(newTask, supabase);
           if (count === 0) {
             toast('Task created — no occurrences fall in the next 4 weeks');
           } else {
@@ -213,7 +250,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
           const { error: assignmentError } = await supabase
             .from('task_assignments')
             .insert({
-              task_id: task.id,
+              task_id: newTask.id,
               assigned_to: formData.assigned_to,
               // datetime-local is a local wall-clock string; convert to a real
               // instant so timestamptz doesn't misread it as UTC
@@ -229,8 +266,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
       onTaskCreated();
       onClose();
     } catch (error: unknown) {
-      console.error('Error creating task:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create task');
+      console.error('Error saving task:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save task');
     } finally {
       setLoading(false);
     }
@@ -270,8 +307,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
               {/* Header */}
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-emerald-50">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Add New Task</h2>
-                  <p className="text-sm sm:text-base text-gray-600 mt-1">Create a new task for your household</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{isEdit ? 'Edit Task' : 'Add New Task'}</h2>
+                  <p className="text-sm sm:text-base text-gray-600 mt-1">
+                    {isEdit ? 'Update the task details' : 'Create a new task for your household'}
+                  </p>
                 </div>
                 <button
                   onClick={onClose}
@@ -337,7 +376,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                       </select>
                     </div>
 
-                    {/* Assigned To */}
+                    {/* Assigned To — hidden in edit mode (assignment rows are not touched) */}
+                    {!isEdit && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <User className="w-4 h-4 inline mr-1" />
@@ -379,11 +419,13 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                         </select>
                       )}
                     </div>
+                    )}
                   </div>
 
                   {/* Due Date and Duration */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {/* Due Date */}
+                    {/* Due Date — hidden in edit mode (scheduling lives on assignments) */}
+                    {!isEdit && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <Calendar className="w-4 h-4 inline mr-1" />
@@ -397,6 +439,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                         required
                       />
                     </div>
+                    )}
 
                     {/* Duration */}
                     <div>
@@ -432,7 +475,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                     </div>
                   </div>
 
-                  {/* Recurrence */}
+                  {/* Recurrence — hidden in edit mode, see the ponytail note on the props */}
+                  {!isEdit && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <Repeat className="w-4 h-4 inline mr-1" />
@@ -512,6 +556,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                       </div>
                     )}
                   </div>
+                  )}
 
                   {/* Difficulty and Points */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -612,7 +657,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                     ) : (
                       <>
                         <CheckCircle className="w-5 h-5" />
-                        Create Task
+                        {isEdit ? 'Save Changes' : 'Create Task'}
                       </>
                     )}
                   </button>
