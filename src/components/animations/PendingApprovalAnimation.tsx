@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import {
   Heart,
   Sparkles,
@@ -46,7 +46,7 @@ const PendingApprovalAnimation: React.FC<PendingApprovalAnimationProps> = ({
     }
   }, [isVisible, onComplete]);
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0, scale: 0.8 },
     visible: { 
       opacity: 1, 
@@ -64,7 +64,7 @@ const PendingApprovalAnimation: React.FC<PendingApprovalAnimationProps> = ({
     }
   };
 
-  const sparkleVariants = {
+  const sparkleVariants: Variants = {
     float: {
       y: [-10, 10, -10],
       rotate: [0, 180, 360],
@@ -77,7 +77,7 @@ const PendingApprovalAnimation: React.FC<PendingApprovalAnimationProps> = ({
     }
   };
 
-  const eyesVariants = {
+  const eyesVariants: Variants = {
     blink: {
       scaleY: [1, 0.1, 1],
       transition: {
@@ -88,7 +88,7 @@ const PendingApprovalAnimation: React.FC<PendingApprovalAnimationProps> = ({
     }
   };
 
-  const clockVariants = {
+  const clockVariants: Variants = {
     tick: {
       rotate: [0, 6, 0], // Small tick motion
       transition: {

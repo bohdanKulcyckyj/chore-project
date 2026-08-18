@@ -280,7 +280,7 @@ const Household: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {members.map((member) => (
+                  {members.map((member: HouseholdMemberWithProfile) => (
                     <TableRow key={member.id} className="hover:bg-gray-50">
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -349,7 +349,7 @@ const Household: React.FC = () => {
 
         {/* Mobile Card View */}
         <div className="md:hidden space-y-4 p-4">
-          {members.map((member, index) => (
+          {members.map((member: HouseholdMemberWithProfile, index) => (
             <motion.div
               key={member.id}
               initial={{ opacity: 0, y: 20 }}

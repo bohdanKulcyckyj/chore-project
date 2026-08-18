@@ -33,7 +33,7 @@ import {
 
 type TaskCompletionWithDetails = Tables<'task_completions'> & {
   assignment: Tables<'task_assignments'> & {
-    task: Tables<'tasks'> | null;
+    task: (Tables<'tasks'> & { category?: Pick<Tables<'task_categories'>, 'name'> | null }) | null;
     assigned_user: Tables<'user_profiles'> | null;
   };
   completed_user: Tables<'user_profiles'> | null;
@@ -83,7 +83,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
         .from('task_assignments')
         .select(`
           *,
-          task:tasks(*)
+          task:tasks(*, category:task_categories(name))
         `)
         .in('id', assignmentIds);
 
@@ -148,7 +148,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
     status: 'approved' | 'rejected',
     notes: string = ''
   ) => {
-    if (!isAdmin || !user) return;
+    if (!isAdmin || !user || !currentHousehold) return;
 
     setProcessingId(completionId);
 
@@ -274,7 +274,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
                 </div>
                 <div>
                   <span className="text-gray-500">Category:</span>
-                  <p className="font-medium">{completion.assignment.task?.category || 'Uncategorized'}</p>
+                  <p className="font-medium">{completion.assignment.task?.category?.name || 'Uncategorized'}</p>
                 </div>
               </div>
               {completion.assignment.task?.description && (
