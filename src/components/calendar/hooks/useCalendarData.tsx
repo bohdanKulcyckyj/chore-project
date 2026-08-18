@@ -1,15 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, Tables } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import { useHousehold } from '../../../hooks/useHousehold';
-
-export type TaskAssignment = Tables<'task_assignments'>;
-
-export interface TaskWithAssignment extends TaskAssignment {
-  tasks: Tables<'tasks'> & {
-    task_categories?: Tables<'task_categories'> | null;
-  };
-  user_profiles?: Tables<'user_profiles'> | null;
-}
+import { TaskWithAssignment, fetchAssignments, attachAssignees, deriveStatus } from '../../../lib/api/tasks';
 
 export interface CalendarFilters {
   memberId: string; // '' = all members
@@ -24,6 +16,10 @@ export interface CalendarDataState {
   setFilters: (filters: Partial<CalendarFilters>) => void;
   refreshData: () => Promise<void>;
 }
+
+// supabase.channel(topic) hands back a same-named channel that is still leaving
+// (fast unmount/remount, StrictMode), whose subscribe() then no-ops → unique topic per mount.
+let channelSeq = 0;
 
 export const useCalendarData = (
   startDate: Date | null,
@@ -47,26 +43,9 @@ export const useCalendarData = (
     try {
       setLoading(true);
       setError(null);
-
-      // ponytail: events render at [due − duration, due] but we filter on due —
-      // widen the start by 24h so events spanning the range start still show;
-      // FullCalendar clips rendering itself. Bump if a task ever exceeds a day.
-      const fetchStart = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
-
-      // No FK from task_assignments to user_profiles, so no embed here —
-      // assignee profiles are resolved client-side from household members below.
-      const { data, error } = await supabase
-        .from('task_assignments')
-        .select('*, tasks!inner(*, task_categories(*))')
-        .eq('tasks.household_id', currentHousehold.id)
-        .gte('due_datetime', fetchStart.toISOString())
-        .lt('due_datetime', endDate.toISOString())
-        .order('due_datetime', { ascending: true });
-
+      const rows = await fetchAssignments({ householdId: currentHousehold.id, from: startDate, to: endDate });
       if (seq !== fetchSeq.current) return; // stale response
-      if (error) throw error;
-
-      setRawTasks((data as TaskWithAssignment[]) || []);
+      setRawTasks(rows);
     } catch (err) {
       if (seq !== fetchSeq.current) return;
       console.error('Error fetching calendar tasks:', err);
@@ -76,25 +55,18 @@ export const useCalendarData = (
     }
   }, [currentHousehold, startDate, endDate]);
 
-  // Attach assignee profile, derive overdue, apply filters (single layer).
-  // ponytail: 'overdue' is display-only — nothing writes it to the DB.
-  const tasks = useMemo(() => {
-    const now = Date.now();
-    const profileById = new Map(members.map(m => [m.user_id, m.user_profile]));
-    return rawTasks
-      .map(t => ({
-        ...t,
-        user_profiles: profileById.get(t.assigned_to) ?? null,
-        status:
-          t.status === 'pending' && t.due_datetime && new Date(t.due_datetime).getTime() < now
-            ? ('overdue' as const)
-            : t.status,
-      }))
-      .filter(t =>
-        (!filters.memberId || t.assigned_to === filters.memberId) &&
-        (!filters.status || t.status === filters.status)
-      );
-  }, [rawTasks, members, filters]);
+  // Attach assignee profile, derive overdue (display-only, day-based like scoring), apply filters.
+  const tasks = useMemo(
+    () =>
+      attachAssignees(rawTasks, members)
+        .map(t => ({ ...t, status: deriveStatus(t) }))
+        .filter(
+          t =>
+            (!filters.memberId || t.assigned_to === filters.memberId) &&
+            (!filters.status || t.status === filters.status)
+        ),
+    [rawTasks, members, filters]
+  );
 
   const setFilters = useCallback((newFilters: Partial<CalendarFilters>) => {
     setFiltersState(prev => ({ ...prev, ...newFilters }));
@@ -120,7 +92,7 @@ export const useCalendarData = (
     // Debounced: a materialization batch fires one event per row.
     let timer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
-      .channel(`calendar-tasks-${householdId}`)
+      .channel(`calendar-tasks-${householdId}-${++channelSeq}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'task_assignments' },
