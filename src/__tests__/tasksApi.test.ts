@@ -114,6 +114,14 @@ describe('canCompleteNow', () => {
     expect(canCompleteNow({ ...base, status: 'completed', task: { recurrence_type: 'none' } }, 'u1', now)).toBe(false);
     expect(canCompleteNow({ ...base, assigned_to: null, task: { recurrence_type: 'none' } }, 'u1', now)).toBe(false);
   });
+  // The calendar used to overwrite `status` with deriveStatus(), so every overdue row reached
+  // the guard as status:'overdue' and lost its Mark Complete button. Overdue must stay completable.
+  it('an overdue row is still completable, and derived status is not fed back in', () => {
+    const overdue = { ...base, due_datetime: local(2026, 7, 10, 9), task: { recurrence_type: 'weekly' } };
+    expect(deriveStatus(overdue, now)).toBe('overdue');
+    expect(canCompleteNow(overdue, 'u1', now)).toBe(true);
+    expect(canCompleteNow({ ...overdue, status: deriveStatus(overdue, now) }, 'u1', now)).toBe(true);
+  });
   it('completionBlocker returns the API message (or null when allowed)', () => {
     expect(completionBlocker({ ...base, task: { recurrence_type: 'none' } }, 'u1', now)).toBeNull();
     expect(completionBlocker({ ...base, task: { recurrence_type: 'none' } }, 'u2', now)).toBe('You are not assigned to this task');
@@ -200,11 +208,23 @@ describe('fetchAssignments query shape', () => {
     expect(call.select).toBe(`${ASSIGNMENT_SELECT}, task_completions(*)`);
     expect(call.filters).toEqual([
       ['eq', 'task.household_id', 'h1'],
+      ['eq', 'task.is_active', true],
       ['eq', 'assigned_to', 'u1'],
       ['gte', 'due_datetime', '2026-08-17T00:00:00.000Z'],
       ['lt', 'due_datetime', '2026-08-18T00:00:00Z'],
     ]);
     expect(call.order).toEqual(['due_datetime', { ascending: true }]);
+  });
+
+  // Archiving only deletes FUTURE open occurrences, so completed/past rows of an archived
+  // task survive in the DB and must be excluded by the query itself.
+  it('excludes archived tasks even with no other options', async () => {
+    mock.state.respond = () => ({ data: [], error: null });
+    await fetchAssignments({ householdId: 'h1' });
+    expect(mock.state.calls[0].filters).toEqual([
+      ['eq', 'task.household_id', 'h1'],
+      ['eq', 'task.is_active', true],
+    ]);
   });
 
   it('throws on error', async () => {

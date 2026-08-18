@@ -61,6 +61,8 @@ export function useTaskCompletion(opts: { onCompleted?: () => void | Promise<voi
 
     void opts.onCompleted?.();
     toast.success(result.message);
+    // Completion succeeded but the proof photos didn't land — say so, or the celebration reads as "all saved".
+    if (result.photosFailed) toast.error('Task saved, but the photos could not be uploaded');
   };
 
   // Stable callbacks: the animations restart their timers whenever onComplete changes identity

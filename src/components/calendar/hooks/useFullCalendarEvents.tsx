@@ -1,20 +1,23 @@
 import { useMemo } from 'react';
 import { EventInput } from '@fullcalendar/core';
 import { parseISO } from 'date-fns';
-import { TaskWithAssignment } from '../../../lib/api/tasks';
+import { deriveStatus, TaskWithAssignment } from '../../../lib/api/tasks';
 import { STATUS_STYLE } from '../../../lib/taskStyles';
 
 /**
  * Transform assignment rows into FullCalendar events.
  * Point events at the due time; views stack them in due order (FullCalendar's default eventOrder).
  */
-export const useFullCalendarEvents = (tasks: TaskWithAssignment[]): EventInput[] =>
+export const useFullCalendarEvents = (
+  tasks: (TaskWithAssignment & { displayStatus?: ReturnType<typeof deriveStatus<TaskWithAssignment['status']>> })[]
+): EventInput[] =>
   useMemo(
     () =>
       tasks
         .filter(t => t.due_datetime)
         .map(t => {
-          const colors = STATUS_STYLE[t.status];
+          // Colour by display status ('overdue'); the row itself keeps its real DB status.
+          const colors = STATUS_STYLE[t.displayStatus ?? deriveStatus(t)];
           return {
             id: `task-${t.id}`,
             title: t.task.name,

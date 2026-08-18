@@ -8,8 +8,13 @@ export interface CalendarFilters {
   status: string; // '' = all statuses
 }
 
+/** Calendar row: real DB `status` (guards read this) + display-only `displayStatus` (chips/filter). */
+export type CalendarTask = TaskWithAssignment & {
+  displayStatus: ReturnType<typeof deriveStatus<TaskWithAssignment['status']>>;
+};
+
 export interface CalendarDataState {
-  tasks: TaskWithAssignment[];
+  tasks: CalendarTask[];
   loading: boolean;
   error: string | null;
   filters: CalendarFilters;
@@ -56,14 +61,17 @@ export const useCalendarData = (
   }, [currentHousehold, startDate, endDate]);
 
   // Attach assignee profile, derive overdue (display-only, day-based like scoring), apply filters.
+  // `status` keeps the real DB value: overwriting it with 'overdue' broke completionBlocker
+  // (and so the modal's Mark Complete button) for every overdue row. Display status goes in
+  // `displayStatus`, which is what the chips colour by and what the status filter matches.
   const tasks = useMemo(
     () =>
       attachAssignees(rawTasks, members)
-        .map(t => ({ ...t, status: deriveStatus(t) }))
+        .map(t => ({ ...t, displayStatus: deriveStatus(t) }))
         .filter(
           t =>
             (!filters.memberId || t.assigned_to === filters.memberId) &&
-            (!filters.status || t.status === filters.status)
+            (!filters.status || t.displayStatus === filters.status)
         ),
     [rawTasks, members, filters]
   );

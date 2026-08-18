@@ -15,6 +15,8 @@ export interface TaskCompletionResult {
   requiresApproval: boolean;
   approvalStatus: 'approved' | 'pending';
   completionId?: string; // set by completeTask; used to link a budget purchase
+  /** Photos were attached but failed to upload; the completion itself still succeeded. */
+  photosFailed?: boolean;
 }
 
 /** Canonical joined assignment row shared by every task surface (Tasks page, dashboard, calendar). */
@@ -44,7 +46,13 @@ export async function fetchAssignments(opts: {
   order?: 'asc' | 'desc';
 }): Promise<TaskWithAssignment[]> {
   const select: string = opts.withCompletions ? `${ASSIGNMENT_SELECT}, task_completions(*)` : ASSIGNMENT_SELECT;
-  let q = supabase.from('task_assignments').select(select).eq('task.household_id', opts.householdId);
+  // is_active on the inner join: archiving only clears FUTURE open occurrences, so completed and
+  // past rows of an archived task survive and would otherwise still show on the calendar.
+  let q = supabase
+    .from('task_assignments')
+    .select(select)
+    .eq('task.household_id', opts.householdId)
+    .eq('task.is_active', true);
   if (opts.assignedTo) q = q.eq('assigned_to', opts.assignedTo);
   if (opts.from) q = q.gte('due_datetime', toIso(opts.from));
   if (opts.to) q = q.lt('due_datetime', toIso(opts.to));
@@ -372,6 +380,7 @@ export async function completeTask(
 
   // Upload photos if provided
   let photoUrls: string[] = [];
+  let photosFailed = false;
   if (completionData.proofPhotos?.length) {
     try {
       photoUrls = await uploadPhotos(
@@ -388,11 +397,13 @@ export async function completeTask(
         .eq('id', completionId);
     } catch (photoError) {
       console.error('Photo upload failed:', photoError);
-      // Don't fail the entire completion for photo upload issues
+      // Don't fail the entire completion for photo upload issues — but the caller must be able
+      // to tell the user, otherwise they get a success celebration with their photos silently dropped.
+      photosFailed = true;
     }
   }
 
-  return { ...completionResult, completionId };
+  return { ...completionResult, completionId, photosFailed };
 }
 
 // Supabase function for atomic transaction
