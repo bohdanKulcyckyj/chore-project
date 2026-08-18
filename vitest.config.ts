@@ -17,6 +17,10 @@ export default defineConfig({
 
     globals: true,
 
+    // Pin a DST-observing zone so recurrence wall-clock/DST tests can't pass
+    // vacuously under a UTC CI box (UTC makes toFloating/fromFloating identity)
+    env: { TZ: "Europe/Prague" },
+
     // Increased timeout for PDF/OCR operations
     testTimeout: 120_000,
   },

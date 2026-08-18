@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import toast from 'react-hot-toast';
 import { supabase, Tables } from '../lib/supabase';
 import { materializeHousehold } from '../lib/recurrence';
 import { useAuth } from './useAuth';
@@ -61,9 +62,10 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
 
       if (error) throw error;
 
-      const householdList = householdMembers
+      // Types lack Relationships, so the join is typed as an array; at runtime it is one row
+      const householdList = (householdMembers
         ?.map(hm => hm.households)
-        .filter(Boolean) as Household[];
+        .filter(Boolean) ?? []) as unknown as Household[];
 
       setHouseholds(householdList || []);
       
@@ -127,17 +129,23 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     }
   }, [user]);
 
+  const householdId = currentHousehold?.id;
+  const userId = user?.id;
+
   useEffect(() => {
     fetchMembers();
-    // Fire-and-forget: materialize recurring task assignments once per household per session
-    if (currentHousehold && !materializedHouseholds.current.has(currentHousehold.id)) {
-      const id = currentHousehold.id;
-      // Mark done only on success so a failed attempt is retried next time
-      void materializeHousehold(id, supabase).then(ok => {
-        if (ok) materializedHouseholds.current.add(id);
+    // Fire-and-forget: materialize recurring task assignments once per household per session.
+    // Marked in-flight synchronously (boot re-renders must not fire duplicate upserts);
+    // unmarked on failure so a later switch back to this household retries.
+    if (householdId && userId && !materializedHouseholds.current.has(householdId)) {
+      materializedHouseholds.current.add(householdId);
+      void materializeHousehold(householdId, userId, supabase).then(ok => {
+        if (ok) return;
+        materializedHouseholds.current.delete(householdId);
+        toast.error('Some recurring chores could not be scheduled', { id: `materialize-${householdId}` });
       });
     }
-  }, [currentHousehold]);
+  }, [householdId, userId]);
 
   const createHousehold = async (name: string, description = '') => {
     console.log('User object:', user);

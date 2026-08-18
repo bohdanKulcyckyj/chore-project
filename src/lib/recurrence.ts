@@ -39,10 +39,14 @@ export const buildPattern = (opts: {
   until?: Date;
   dtstart: Date;
 }): RecurrencePattern => {
+  const day = opts.dtstart.getDate();
   const rule = new RRule({
     freq: Frequency[opts.freq],
     interval: opts.interval ?? 1,
     ...(opts.byweekday?.length ? { byweekday: opts.byweekday } : {}),
+    // Monthly on the 29th–31st: fall back to the last day of shorter months
+    // instead of silently skipping them (plain FREQ=MONTHLY skips Feb for the 31st).
+    ...(opts.freq === 'MONTHLY' && day >= 29 ? { bymonthday: [day, -1], bysetpos: 1 } : {}),
     ...(opts.until ? { until: toFloating(opts.until) } : {}),
     dtstart: toFloating(opts.dtstart),
   });
@@ -58,7 +62,9 @@ export const buildPattern = (opts: {
 
 export const getRecurrenceText = (pattern: RecurrencePattern): string => {
   try {
-    return rrulestr(toRRuleString(pattern)).toText();
+    const text = rrulestr(toRRuleString(pattern)).toText();
+    // buildPattern's last-day fallback reads "on the 31st and last" — say what it means
+    return pattern.rrule.includes('BYSETPOS=1') ? text.replace(' and last', ' or last day') : text;
   } catch {
     return 'Custom recurrence';
   }
@@ -89,15 +95,47 @@ export const generateOccurrences = (
   }
 };
 
+/**
+ * Rotation pool restricted to current household members. A row assigned to
+ * someone who left fails RLS and aborts the whole per-task upsert (even the
+ * duplicate rows), so departed members must be dropped before the modulo.
+ * Falls back to the task creator when the whole rotation has left; [] = skip.
+ */
+export const activeRotation = (
+  members: string[],
+  activeIds: Set<string>,
+  fallback: string | null
+): string[] => {
+  const active = members.filter(id => activeIds.has(id));
+  if (active.length > 0) return active;
+  return fallback && activeIds.has(fallback) ? [fallback] : [];
+};
+
 export const materializeTask = async (
   task: Task,
   supabaseClient: SupabaseClient<Database>,
-  horizonDays = 28
+  opts: {
+    /** Current household member ids. Omit only right after creation, when the
+     * rotation was just picked from the live member list. */
+    activeMemberIds?: Set<string>;
+    /** Must be the calling user (RLS: assigned_by = auth.uid()). Defaults to the
+     * task creator, which is the caller at creation time. */
+    assignedBy?: string;
+    horizonDays?: number;
+  } = {}
 ): Promise<number> => {
+  const { activeMemberIds, assignedBy = task.created_by, horizonDays = 28 } = opts;
   if (task.recurrence_type === 'none') return 0;
   const pattern = task.recurrence_pattern as RecurrencePattern | null;
-  const members = pattern?.rotation?.members ?? [];
-  if (!pattern?.rrule || !pattern.dtstart || members.length === 0) return 0;
+  if (!pattern?.rrule || !pattern.dtstart) return 0;
+  const rotation = pattern.rotation?.members ?? [];
+  const members = activeMemberIds
+    ? activeRotation(rotation, activeMemberIds, task.created_by)
+    : rotation;
+  if (members.length === 0) {
+    console.warn('No active rotation members; skipping task', task.id);
+    return 0;
+  }
 
   // Window starts at local start-of-today so an occurrence typed for earlier
   // today (allowed by the form) is not dropped.
@@ -112,7 +150,7 @@ export const materializeTask = async (
     task_id: task.id,
     assigned_to: members[(startIndex + index) % members.length],
     due_datetime: date.toISOString(),
-    assigned_by: task.created_by ?? members[0],
+    assigned_by: assignedBy,
     status: 'pending' as const,
   }));
 
@@ -125,22 +163,28 @@ export const materializeTask = async (
 
 export const materializeHousehold = async (
   householdId: string,
+  userId: string,
   supabaseClient: SupabaseClient<Database>
 ): Promise<boolean> => {
-  const { data, error } = await supabaseClient
-    .from('tasks')
-    .select('*')
-    .eq('household_id', householdId)
-    .neq('recurrence_type', 'none')
-    .eq('is_active', true);
+  const [tasksRes, membersRes] = await Promise.all([
+    supabaseClient
+      .from('tasks')
+      .select('*')
+      .eq('household_id', householdId)
+      .neq('recurrence_type', 'none')
+      .eq('is_active', true),
+    supabaseClient.from('household_members').select('user_id').eq('household_id', householdId),
+  ]);
+  const error = tasksRes.error ?? membersRes.error;
   if (error) {
     console.error('Error materializing household:', householdId, error);
     return false;
   }
+  const activeMemberIds = new Set((membersRes.data ?? []).map(m => m.user_id));
   let ok = true;
-  for (const task of data ?? []) {
+  for (const task of tasksRes.data ?? []) {
     try {
-      await materializeTask(task, supabaseClient);
+      await materializeTask(task, supabaseClient, { activeMemberIds, assignedBy: userId });
     } catch (taskError) {
       // one bad task must not abort the rest
       console.error('Error materializing task:', task.id, taskError);
