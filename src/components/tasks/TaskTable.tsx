@@ -18,16 +18,14 @@ import {
   Repeat
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { Tables, supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import toast from 'react-hot-toast';
-import CompleteTaskModal from './CompleteTaskModal';
 import TaskDetailModal from './TaskDetailModal';
-import PurchaseEditorModal from '../budget/PurchaseEditorModal';
-import TaskCompletionCelebration from '../animations/TaskCompletionCelebration';
-import PendingApprovalAnimation from '../animations/PendingApprovalAnimation';
-import { completeTask, isDueAfterToday, TaskCompletionData, TaskCompletionResult } from '../../lib/api/tasks';
+import { useTaskCompletion } from './useTaskCompletion';
+import { canCompleteNow, claimTask, deriveStatus, isDueAfterToday, TaskWithAssignment } from '../../lib/api/tasks';
+import { DIFFICULTY_STYLE, STATUS_STYLE } from '../../lib/taskStyles';
+import { DATE_FMT } from '../../lib/utils';
 
 // Shadcn UI Components
 import {
@@ -55,20 +53,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
-// Types
-type TaskWithAssignment = {
-  id: string;
-  task: Tables<'tasks'> & {
-    category?: Tables<'task_categories'>;
-  };
-  assigned_to?: string;
-  assigned_user?: Tables<'user_profiles'>;
-  due_datetime?: string;
-  status: string;
-  assigned_at?: string;
-  assigned_by?: string;
-};
-
 interface TaskTableProps {
   tasks: TaskWithAssignment[];
   loading?: boolean;
@@ -85,6 +69,11 @@ interface SortState {
   field: string;
   direction: 'asc' | 'desc';
 }
+
+const StatusPill: React.FC<{ task: TaskWithAssignment }> = ({ task }) => {
+  const status = deriveStatus(task);
+  return <Badge variant="outline" className={STATUS_STYLE[status].tw}>{status.replace('_', ' ')}</Badge>;
+};
 
 const TaskTableShadcn: React.FC<TaskTableProps> = ({ 
   tasks, 
@@ -104,41 +93,16 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     direction: 'asc'
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [completeModalTask, setCompleteModalTask] = useState<TaskWithAssignment | null>(null);
   const [detailModalTask, setDetailModalTask] = useState<TaskWithAssignment | null>(null);
-  const [celebrationData, setCelebrationData] = useState<{
-    visible: boolean;
-    result?: TaskCompletionResult;
-    pointsEarned?: number;
-    streakCount?: number;
-  }>({ visible: false });
-  const [pendingApprovalData, setPendingApprovalData] = useState<{
-    visible: boolean;
-    taskName?: string;
-  }>({ visible: false });
-  const [purchaseCompletionId, setPurchaseCompletionId] = useState<string | null>(null);
+  const { startCompletion, modals: completionModals } = useTaskCompletion({ onCompleted: onTaskUpdate });
 
   const handleClaimTask = async (task: TaskWithAssignment) => {
     if (!user || task.status !== 'unassigned') return;
 
     setClaimingTaskId(task.id);
-    
+
     try {
-      // Extract task ID from the unassigned task ID format
-      const taskId = task.id.startsWith('unassigned-') ? task.id.replace('unassigned-', '') : task.task.id;
-      
-      const { error } = await supabase
-        .from('task_assignments')
-        .insert({
-          task_id: taskId,
-          assigned_to: user.id,
-          due_datetime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Default 7 days from now
-          assigned_by: user.id,
-          status: 'pending',
-        });
-
-      if (error) throw error;
-
+      await claimTask(task.task.id, user.id);
       toast.success('Task claimed successfully!');
       onTaskUpdate?.();
     } catch (error) {
@@ -162,82 +126,15 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     toast('Reassign task functionality coming soon!', { icon: '🚧' });
   };
 
-  const isRecurring = (task: TaskWithAssignment) => task.task.recurrence_type !== 'none';
-  // Mirrors the completeTask guard: future recurring instances can't be completed yet
-  const canCompleteNow = (task: TaskWithAssignment) =>
-    task.status !== 'completed' && !(isRecurring(task) && isDueAfterToday(task.due_datetime));
-
-  const handleMarkComplete = async (task: TaskWithAssignment) => {
-    if (!user || task.assigned_to !== user.id || !canCompleteNow(task)) {
-      toast.error('You cannot complete this task');
-      return;
-    }
-    setCompleteModalTask(task);
+  // "Next:" only for a recurring occurrence that is still in the future
+  const dueLabel = (task: TaskWithAssignment, fmt: string) => {
+    if (!task.due_datetime) return 'No due date';
+    const next = task.task.recurrence_type !== 'none' && isDueAfterToday(task.due_datetime) ? 'Next: ' : '';
+    return next + format(new Date(task.due_datetime), fmt);
   };
 
   const handleTaskRowClick = (task: TaskWithAssignment) => {
     setDetailModalTask(task);
-  };
-
-  const handleCompleteTask = async (completionData: TaskCompletionData & { addPurchase?: boolean }) => {
-    if (!completeModalTask) return;
-
-    try {
-      const result = await completeTask(completeModalTask.id, completionData);
-
-      // Shopping task: user asked to record the purchase → open budget editor
-      if (completionData.addPurchase && result.completionId) {
-        setPurchaseCompletionId(result.completionId);
-      }
-
-      if (result.requiresApproval) {
-        // Show pending approval animation
-        setPendingApprovalData({
-          visible: true,
-          taskName: completeModalTask.task.name
-        });
-      } else {
-        // Get updated streak count for celebration
-        let streakCount = 1;
-        if (user) {
-          const { data: householdData } = await supabase
-            .from('household_members')
-            .select('household_id')
-            .eq('user_id', user.id)
-            .single();
-
-          if (householdData) {
-            const { data: pointsData } = await supabase
-              .from('user_points')
-              .select('current_streak')
-              .eq('user_id', user.id)
-              .eq('household_id', householdData.household_id)
-              .single();
-
-            if (pointsData) {
-              streakCount = pointsData.current_streak;
-            }
-          }
-        }
-        
-        // Show celebration animation
-        setCelebrationData({
-          visible: true,
-          result,
-          pointsEarned: result.points,
-          streakCount
-        });
-      }
-
-      // Refresh task list
-      onTaskUpdate?.();
-      
-      toast.success(result.message);
-    } catch (error) {
-      console.error('Error completing task:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to complete task');
-      throw error;
-    }
   };
 
   const getFieldValue = (task: TaskWithAssignment, field: string) => {
@@ -249,7 +146,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
       case 'priority':
         return task.task.difficulty;
       case 'status':
-        return task.status;
+        return deriveStatus(task);
       case 'points':
         return task.task.points;
       default:
@@ -259,7 +156,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
 
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
-    const statuses = Array.from(new Set(tasks.map(t => t.status)));
+    const statuses = Array.from(new Set(tasks.map(t => deriveStatus(t))));
     const categories = Array.from(new Set(tasks.map(t => t.task.category?.name).filter(Boolean)));
     const assignees = Array.from(new Set(tasks.map(t => 
       t.status === 'unassigned' ? 'Available' : t.assigned_user?.display_name
@@ -275,7 +172,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         task.task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.task.description.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesStatus = !filters.status || filters.status === '__all__' || task.status === filters.status;
+      const matchesStatus = !filters.status || filters.status === '__all__' || deriveStatus(task) === filters.status;
       const matchesCategory = !filters.category || filters.category === '__all__' || task.task.category?.name === filters.category;
       const matchesAssignee = !filters.assignedTo || filters.assignedTo === '__all__' || 
         (filters.assignedTo === 'Available' && task.status === 'unassigned') ||
@@ -305,38 +202,6 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
     }));
   };
 
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'overdue':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'skipped':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'unassigned':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'pending':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'hard':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
 
   const SortButton: React.FC<{ field: string; children: React.ReactNode }> = ({ field, children }) => (
     <Button
@@ -397,8 +262,8 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
             </>
           ) : (
             <>
-              {(canCompleteNow(task) && (task.assigned_to === user?.id || isAdmin)) && (
-                <DropdownMenuItem onClick={() => handleMarkComplete(task)}>
+              {canCompleteNow(task, user?.id) && (
+                <DropdownMenuItem onClick={() => startCompletion(task)}>
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Mark Complete
                 </DropdownMenuItem>
@@ -651,10 +516,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-900">
-                        {assignment.due_datetime ?
-                          `${isRecurring(assignment) && assignment.status !== 'completed' ? 'Next: ' : ''}${format(new Date(assignment.due_datetime), 'MMM dd, yyyy')}` :
-                          'No due date'
-                        }
+                        {dueLabel(assignment, DATE_FMT)}
                       </span>
                     </div>
                   </TableCell>
@@ -671,15 +533,13 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                   </TableCell>
                   
                   <TableCell>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
+                    <Badge variant="outline" className={DIFFICULTY_STYLE[assignment.task.difficulty].tw}>
                       {assignment.task.difficulty}
-                    </span>
+                    </Badge>
                   </TableCell>
-                  
+
                   <TableCell>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                      {assignment.status.replace('_', ' ')}
-                    </span>
+                    <StatusPill task={assignment} />
                   </TableCell>
                   
                   <TableCell>
@@ -755,10 +615,7 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
                 <div className="flex items-center">
                   <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                   <span className="text-sm text-gray-900">
-                    {assignment.due_datetime ?
-                      `${isRecurring(assignment) && assignment.status !== 'completed' ? 'Next: ' : ''}${format(new Date(assignment.due_datetime), 'MMM dd')}` :
-                      'No due date'
-                    }
+                    {dueLabel(assignment, 'MMM dd')}
                   </span>
                 </div>
 
@@ -781,14 +638,12 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
               {/* Bottom Row - Status, Category, Priority */}
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Status */}
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                  {assignment.status.replace('_', ' ')}
-                </span>
-                
+                <StatusPill task={assignment} />
+
                 {/* Priority */}
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(assignment.task.difficulty)}`}>
+                <Badge variant="outline" className={DIFFICULTY_STYLE[assignment.task.difficulty].tw}>
                   {assignment.task.difficulty}
-                </span>
+                </Badge>
 
                 {/* Recurring */}
                 {assignment.task.recurrence_type !== 'none' && (
@@ -811,48 +666,19 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
         )}
       </div>
 
-      {/* Complete Task Modal */}
-      <CompleteTaskModal
-        isOpen={!!completeModalTask}
-        task={completeModalTask}
-        onClose={() => setCompleteModalTask(null)}
-        onComplete={handleCompleteTask}
-      />
-
       {/* Task Detail Modal */}
       <TaskDetailModal
         isOpen={!!detailModalTask}
         task={detailModalTask}
         onClose={() => setDetailModalTask(null)}
         onClaimTask={handleClaimTask}
-        onMarkComplete={handleMarkComplete}
+        onMarkComplete={startCompletion}
         onEditTask={handleEditTask}
         onReassignTask={handleReassignTask}
       />
 
-      {/* Celebration Animation */}
-      <TaskCompletionCelebration
-        isVisible={celebrationData.visible}
-        result={celebrationData.result!}
-        pointsEarned={celebrationData.pointsEarned || 0}
-        streakCount={celebrationData.streakCount}
-        onComplete={() => setCelebrationData({ visible: false })}
-      />
-
-      {/* Purchase editor for completed Shopping tasks */}
-      <PurchaseEditorModal
-        isOpen={!!purchaseCompletionId}
-        onClose={() => setPurchaseCompletionId(null)}
-        onSaved={() => {}}
-        taskCompletionId={purchaseCompletionId}
-      />
-
-      {/* Pending Approval Animation */}
-      <PendingApprovalAnimation
-        isVisible={pendingApprovalData.visible}
-        taskName={pendingApprovalData.taskName || ''}
-        onComplete={() => setPendingApprovalData({ visible: false })}
-      />
+      {/* Complete modal + celebration / pending-approval / purchase editor */}
+      {completionModals}
     </motion.div>
   );
 };

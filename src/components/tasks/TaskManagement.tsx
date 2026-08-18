@@ -1,9 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { CheckSquare, Plus, Download, Upload, Users } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
-import { supabase, Tables } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
+import {
+  attachAssignees,
+  deriveStatus,
+  fetchAssignmentsForTasks,
+  pickCurrentOccurrence,
+  TaskWithAssignment,
+} from '../../lib/api/tasks';
 import TaskTable from './TaskTable';
 import AddTaskModal from './AddTaskModal';
 import AdminGuard from '../auth/AdminGuard';
@@ -11,26 +18,16 @@ import RoleBasedComponent from '../auth/RoleBasedComponent';
 import AvailableTasksView from './AvailableTasksView';
 import PersonalTaskStats from './PersonalTaskStats';
 
-type TaskWithAssignment = {
-  id: string;
-  task: Tables<'tasks'> & {
-    category?: Tables<'task_categories'>;
-  };
-  assigned_to?: string;
-  assigned_user?: Tables<'user_profiles'>;
-  due_datetime?: string;
-  status: string;
-  assigned_at?: string;
-  assigned_by?: string;
-};
-
 const TaskManagement: React.FC = () => {
   const { user } = useAuth();
-  const { currentHousehold } = useHousehold();
-  const [tasks, setTasks] = useState<TaskWithAssignment[]>([]);
+  const { currentHousehold, members } = useHousehold();
+  const [rows, setRows] = useState<TaskWithAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Resolve assignees from the household context (members may arrive after the rows)
+  const tasks: TaskWithAssignment[] = useMemo(() => attachAssignees(rows, members), [rows, members]);
 
   const fetchTasks = async () => {
     if (!user || !currentHousehold) return;
@@ -39,7 +36,6 @@ const TaskManagement: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // First, fetch all tasks for the household
       const { data: allTasks, error: tasksError } = await supabase
         .from('tasks')
         .select(`
@@ -54,93 +50,44 @@ const TaskManagement: React.FC = () => {
         throw tasksError;
       }
 
-      // Fetch all assignments for these tasks (materialization already caps
-      // recurring rows at ~28 days/task; the collapse below reduces each
-      // recurring task to a single row)
-      const taskIds = allTasks?.map(t => t.id) || [];
-      let assignments: Tables<'task_assignments'>[] = [];
+      const assignments = await fetchAssignmentsForTasks(allTasks ?? []);
+      const byTask = new Map<string, typeof assignments>();
+      assignments.forEach(a => byTask.set(a.task_id, [...(byTask.get(a.task_id) ?? []), a]));
 
-      if (taskIds.length > 0) {
-        const { data: assignmentData, error: assignmentError } = await supabase
-          .from('task_assignments')
-          .select('*')
-          .in('task_id', taskIds)
-          .order('due_datetime', { ascending: true });
-
-        if (assignmentError) {
-          throw assignmentError;
-        }
-
-        assignments = assignmentData || [];
-      }
-      const everAssignedTaskIds = new Set(assignments.map(a => a.task_id));
-
-      // Collapse recurring tasks to one row: earliest non-completed instance,
-      // else the latest completed one (so the task stays visible as done).
-      // Rows are ordered asc by due_datetime.
-      const recurringRow = new Map<string, Tables<'task_assignments'>>();
-      assignments = assignments.filter(assignment => {
-        const task = allTasks?.find(t => t.id === assignment.task_id);
-        if (!task || task.recurrence_type === 'none') return true;
-        const current = recurringRow.get(assignment.task_id);
-        if (current && current.status !== 'completed') return false;
-        recurringRow.set(assignment.task_id, assignment);
-        return false;
-      }).concat([...recurringRow.values()]);
-
-      // Fetch user profiles for assigned users
-      const userIds = [...new Set(assignments.map(a => a.assigned_to).filter(Boolean))];
-      let userProfiles: Tables<'user_profiles'>[] = [];
-      
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .in('id', userIds);
-        
-        userProfiles = profiles || [];
-      }
-
-      // Create combined task list with assignment info
-      const combinedTasks: TaskWithAssignment[] = [];
-
-      // Add assigned tasks
-      assignments.forEach(assignment => {
-        const task = allTasks?.find(t => t.id === assignment.task_id);
-        if (task) {
-          combinedTasks.push({
-            id: assignment.id,
-            task,
-            assigned_to: assignment.assigned_to,
-            assigned_user: userProfiles.find(user => user.id === assignment.assigned_to),
-            due_datetime: assignment.due_datetime,
-            status: assignment.status,
-            assigned_at: assignment.assigned_at,
-            assigned_by: assignment.assigned_by,
-          });
-        }
-      });
-
-      // Add unassigned tasks (only tasks that have never had an assignment row)
-      allTasks?.forEach(task => {
-        if (!everAssignedTaskIds.has(task.id)) {
-          combinedTasks.push({
+      // One row per recurring task (its current occurrence); every row of a one-off task;
+      // a claimable 'unassigned' placeholder for a one-off task that was never assigned.
+      // A recurring task with no row in the window (not started yet / ended) is omitted.
+      const combined: TaskWithAssignment[] = [];
+      (allTasks ?? []).forEach(task => {
+        const own = byTask.get(task.id) ?? [];
+        if (task.recurrence_type !== 'none') {
+          const current = pickCurrentOccurrence(own);
+          if (current) combined.push({ ...current, task });
+        } else if (own.length > 0) {
+          own.forEach(a => combined.push({ ...a, task }));
+        } else {
+          combined.push({
             id: `unassigned-${task.id}`,
+            task_id: task.id,
             task,
             status: 'unassigned',
+            assigned_to: null,
+            assigned_by: null,
+            assigned_at: '', // UI-only placeholder row: never assigned
+            due_datetime: null,
           });
         }
       });
 
       // Sort by due date (unassigned tasks go to the end)
-      combinedTasks.sort((a, b) => {
+      combined.sort((a, b) => {
         if (!a.due_datetime && !b.due_datetime) return 0;
         if (!a.due_datetime) return 1;
         if (!b.due_datetime) return -1;
         return new Date(a.due_datetime).getTime() - new Date(b.due_datetime).getTime();
       });
 
-      setTasks(combinedTasks);
+      setRows(combined);
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError('Failed to load tasks. Please try again.');
@@ -156,6 +103,9 @@ const TaskManagement: React.FC = () => {
   const handleTaskUpdate = () => {
     fetchTasks();
   };
+
+  const statusCounts = { unassigned: 0, pending: 0, in_progress: 0, completed: 0, overdue: 0, skipped: 0 };
+  tasks.forEach(t => { statusCounts[deriveStatus(t)]++; });
 
   if (error) {
     return (
@@ -282,21 +232,24 @@ const TaskManagement: React.FC = () => {
         
         <div className="bg-white rounded-lg p-4 shadow-sm border">
           <div className="text-2xl font-bold text-purple-600">
-            {tasks.filter(t => t.status === 'unassigned').length}
+            {statusCounts.unassigned}
           </div>
           <div className="text-sm text-gray-500">Unassigned</div>
         </div>
         
         <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="text-2xl font-bold text-blue-600">
-            {tasks.filter(t => t.status === 'pending').length}
+          <div className="text-2xl font-bold text-amber-600">
+            {statusCounts.pending}
           </div>
           <div className="text-sm text-gray-500">Pending (upcoming)</div>
+          {statusCounts.overdue > 0 && (
+            <div className="text-xs font-medium text-red-600">{statusCounts.overdue} overdue</div>
+          )}
         </div>
-        
+
         <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="text-2xl font-bold text-yellow-600">
-            {tasks.filter(t => t.status === 'in_progress').length}
+          <div className="text-2xl font-bold text-blue-600">
+            {statusCounts.in_progress}
           </div>
           <div className="text-sm text-gray-500">In Progress</div>
         </div>
@@ -319,7 +272,11 @@ const TaskManagement: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <AvailableTasksView onTaskClaimed={handleTaskUpdate} />
+              <AvailableTasksView
+                tasks={tasks.filter(t => t.status === 'unassigned').map(t => t.task)}
+                loading={loading}
+                onTaskClaimed={handleTaskUpdate}
+              />
             </motion.div>
           </div>
         }

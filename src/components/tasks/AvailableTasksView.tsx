@@ -1,72 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Clock, Star, UserPlus, Tag } from 'lucide-react';
-import { supabase, Tables } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { useHousehold } from '../../hooks/useHousehold';
+import { claimTask, TaskWithAssignment } from '../../lib/api/tasks';
+import { DIFFICULTY_STYLE } from '../../lib/taskStyles';
 import toast from 'react-hot-toast';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 
-type TaskWithCategory = Tables<'tasks'> & {
-  category?: Tables<'task_categories'>;
-};
+type TaskWithCategory = TaskWithAssignment['task'];
 
 interface AvailableTasksViewProps {
+  /** Never-assigned one-off tasks — TaskManagement's 'unassigned' rows (one fetch for the whole page) */
+  tasks: TaskWithCategory[];
+  loading: boolean;
   onTaskClaimed: () => void;
 }
 
-const AvailableTasksView: React.FC<AvailableTasksViewProps> = ({ onTaskClaimed }) => {
+const AvailableTasksView: React.FC<AvailableTasksViewProps> = ({ tasks: availableTasks, loading, onTaskClaimed }) => {
   const { user } = useAuth();
-  const { currentHousehold } = useHousehold();
-  const [availableTasks, setAvailableTasks] = useState<TaskWithCategory[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
-
-  const fetchAvailableTasks = async () => {
-    if (!currentHousehold) return;
-
-    try {
-      setLoading(true);
-
-      // Fetch all active tasks for the household
-      const { data: allTasks, error: tasksError } = await supabase
-        .from('tasks')
-        .select(`
-          *,
-          category:task_categories(*)
-        `)
-        .eq('household_id', currentHousehold.id)
-        .eq('is_active', true);
-
-      if (tasksError) throw tasksError;
-
-      // Get all assigned task IDs
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from('task_assignments')
-        .select('task_id')
-        .in('task_id', allTasks?.map(t => t.id) || []);
-
-      if (assignmentsError) throw assignmentsError;
-
-      const assignedTaskIds = new Set(assignments?.map(a => a.task_id) || []);
-
-      // Filter to only unassigned tasks
-      const unassignedTasks = allTasks?.filter(task => !assignedTaskIds.has(task.id)) || [];
-
-      setAvailableTasks(unassignedTasks);
-    } catch (error) {
-      console.error('Error fetching available tasks:', error);
-      toast.error('Failed to load available tasks');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAvailableTasks();
-  }, [currentHousehold]);
 
   const handleClaimTask = async (task: TaskWithCategory) => {
     if (!user) return;
@@ -74,36 +29,14 @@ const AvailableTasksView: React.FC<AvailableTasksViewProps> = ({ onTaskClaimed }
     setClaimingTaskId(task.id);
 
     try {
-      // Create assignment for the task
-      const { error } = await supabase
-        .from('task_assignments')
-        .insert({
-          task_id: task.id,
-          assigned_to: user.id,
-          due_datetime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-          assigned_by: user.id,
-          status: 'pending',
-        });
-
-      if (error) throw error;
-
+      await claimTask(task.id, user.id);
       toast.success(`Successfully claimed "${task.name}"!`);
-      await fetchAvailableTasks();
       onTaskClaimed();
     } catch (error) {
       console.error('Error claiming task:', error);
       toast.error('Failed to claim task');
     } finally {
       setClaimingTaskId(null);
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy': return 'bg-green-100 text-green-800 border-green-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'hard': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -211,9 +144,9 @@ const AvailableTasksView: React.FC<AvailableTasksViewProps> = ({ onTaskClaimed }
                   </span>
                 )}
                 
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(task.difficulty)}`}>
+                <Badge variant="outline" className={DIFFICULTY_STYLE[task.difficulty].tw}>
                   {task.difficulty}
-                </span>
+                </Badge>
 
                 <span className="inline-flex items-center text-gray-500">
                   <Clock className="w-4 h-4 mr-1" />

@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
 import { buildPattern, getRecurrenceText, materializeTask } from '../../lib/recurrence';
+import { DIFFICULTY_STYLE } from '../../lib/taskStyles';
 import toast from 'react-hot-toast';
 
 type HouseholdMember = Tables<'household_members'> & {
@@ -136,6 +137,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     if (isRecurring) {
       if (formData.repeat_interval < 1) return 'Repeat interval must be at least 1';
       if (formData.rotation_members.length === 0) return 'Select at least one member for the rotation';
+      if (formData.repeat_until && formData.repeat_until < formData.due_datetime.slice(0, 10)) {
+        return 'End date must be on or after the due date';
+      }
     }
 
     // Check if due date is in the future
@@ -229,15 +233,6 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
       toast.error(error instanceof Error ? error.message : 'Failed to create task');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy': return 'bg-green-100 text-green-800 border-green-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'hard': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -445,7 +440,17 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                     </label>
                     <select
                       value={formData.repeat}
-                      onChange={(e) => handleInputChange('repeat', e.target.value)}
+                      onChange={(e) => {
+                        const repeat = e.target.value as FormData['repeat'];
+                        // Assign-To sits above Repeat: carry the chosen assignee into the rotation
+                        setFormData(prev => ({
+                          ...prev,
+                          repeat,
+                          rotation_members: repeat && prev.rotation_members.length === 0 && prev.assigned_to
+                            ? [prev.assigned_to]
+                            : prev.rotation_members,
+                        }));
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base"
                     >
                       <option value="">Does not repeat</option>
@@ -466,7 +471,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                             className="w-20 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base text-center"
                           />
                           <span className="text-sm text-gray-700">
-                            {{ DAILY: 'day(s)', WEEKLY: 'week(s)', MONTHLY: 'month(s)' }[formData.repeat]}
+                            {{ DAILY: 'day(s)', WEEKLY: 'week(s)', MONTHLY: 'month(s)' }[formData.repeat as 'DAILY' | 'WEEKLY' | 'MONTHLY']}
                           </span>
                         </div>
 
@@ -523,7 +528,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                             onClick={() => handleInputChange('difficulty', difficulty)}
                             className={`p-3 border-2 rounded-xl transition-all capitalize font-medium flex items-center justify-center gap-2 ${
                               formData.difficulty === difficulty 
-                                ? getDifficultyColor(difficulty) + ' ring-2 ring-blue-500 ring-opacity-50'
+                                ? DIFFICULTY_STYLE[difficulty].tw + ' ring-2 ring-blue-500 ring-opacity-50'
                                 : 'border-gray-200 hover:border-gray-300 bg-white text-gray-700'
                             }`}
                           >

@@ -18,27 +18,16 @@ import {
   Repeat
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { Tables } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { getRecurrenceText, RecurrencePattern } from '../../lib/recurrence';
+import { canCompleteNow, deriveStatus, TaskWithAssignment } from '../../lib/api/tasks';
+import { DIFFICULTY_STYLE, STATUS_STYLE } from '../../lib/taskStyles';
+import { DATE_FMT, DATE_TIME_FMT } from '../../lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-export type TaskWithAssignment = {
-  id: string;
-  task: Tables<'tasks'> & {
-    category?: Tables<'task_categories'>;
-  };
-  assigned_to?: string;
-  assigned_user?: Tables<'user_profiles'>;
-  due_datetime?: string;
-  status: string;
-  assigned_at?: string;
-  assigned_by?: string;
-  completed_at?: string;
-  completion_notes?: string;
-  completion_photo_url?: string;
-};
+// Re-export for existing importers; the canonical type lives in lib/api/tasks
+export type { TaskWithAssignment } from '../../lib/api/tasks';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -65,6 +54,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const { user } = useAuth();
   if (!task) return null;
 
+  const status = deriveStatus(task);
+  const completion = task.task_completions?.[0];
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
@@ -79,38 +71,6 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         return <UserPlus className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'overdue':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'skipped':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'unassigned':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'pending':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'hard':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -173,13 +133,13 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
                 {/* Status and Priority Row */}
                 <div className="flex items-center gap-4">
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor(task.status)}`}>
-                    {getStatusIcon(task.status)}
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${STATUS_STYLE[status].tw}`}>
+                    {getStatusIcon(status)}
                     <span className="font-medium text-sm">
-                      {task.status.replace('_', ' ').toUpperCase()}
+                      {status.replace('_', ' ').toUpperCase()}
                     </span>
                   </div>
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getDifficultyColor(task.task.difficulty)}`}>
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${DIFFICULTY_STYLE[task.task.difficulty].tw}`}>
                     <Target className="w-4 h-4" />
                     <span className="font-medium text-sm">
                       {task.task.difficulty.toUpperCase()}
@@ -210,17 +170,17 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-400" />
                             <span className="font-medium text-gray-900">
-                              {format(new Date(task.due_datetime), 'MMM dd, yyyy h:mm a')}
+                              {format(new Date(task.due_datetime), DATE_TIME_FMT)}
                             </span>
                           </div>
                         </div>
                       )}
-                      
+
                       {task.assigned_at && (
                         <div className="flex items-center justify-between">
                           <span className="text-gray-600">Assigned on:</span>
                           <span className="font-medium text-gray-900">
-                            {format(new Date(task.assigned_at), 'MMM dd, yyyy')}
+                            {format(new Date(task.assigned_at), DATE_FMT)}
                           </span>
                         </div>
                       )}
@@ -287,28 +247,28 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       <Award className="w-5 h-5" />
                       Completion Details
                     </h4>
-                    
-                    {task.completed_at && (
+
+                    {completion && (
                       <div className="mb-2">
                         <span className="text-green-700 font-medium">Completed on: </span>
                         <span className="text-green-800">
-                          {format(new Date(task.completed_at), 'MMM dd, yyyy h:mm a')}
+                          {format(new Date(completion.completed_at), DATE_TIME_FMT)}
                         </span>
                       </div>
                     )}
-                    
-                    {task.completion_notes && (
+
+                    {completion?.notes && (
                       <div className="mb-2">
                         <span className="text-green-700 font-medium">Notes: </span>
-                        <p className="text-green-800 mt-1">{task.completion_notes}</p>
+                        <p className="text-green-800 mt-1">{completion.notes}</p>
                       </div>
                     )}
-                    
-                    {task.completion_photo_url && (
+
+                    {completion?.proof_urls?.[0] && (
                       <div>
                         <span className="text-green-700 font-medium">Photo proof:</span>
-                        <img 
-                          src={task.completion_photo_url} 
+                        <img
+                          src={completion.proof_urls[0]}
                           alt="Task completion proof" 
                           className="mt-2 rounded-lg max-w-full h-auto border border-green-300"
                         />
@@ -334,11 +294,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </Button>
                   )}
                   
-                  {/* Only the assignee can complete — the API rejects anyone else */}
-                  {task.status !== 'completed' &&
-                    task.status !== 'unassigned' &&
-                    onMarkComplete &&
-                    task.assigned_to === user?.id && (
+                  {/* Same guards as the API: assignee only, not completed, no future recurring occurrence */}
+                  {onMarkComplete && canCompleteNow(task, user?.id) && (
                     <Button
                       onClick={() => onMarkComplete(task)}
                       disabled={isActionPending}
