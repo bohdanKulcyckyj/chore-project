@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { useHousehold } from '../../hooks/useHousehold';
 import { TaskWithAssignment } from '../../lib/api/tasks';
 import { TIME_FMT } from '../../lib/utils';
+import { userColor } from '../../lib/taskStyles';
 import { useCalendarData } from './hooks/useCalendarData';
 import { useFullCalendarEvents } from './hooks/useFullCalendarEvents';
 import TaskDetailModal from '../tasks/TaskDetailModal';
@@ -34,7 +35,10 @@ const renderEventContent = (arg: EventContentArg) => {
   const isDay = arg.view.type === FC_VIEWS.day;
   const extra = isDay ? '' : 'hidden md:inline';
   return (
-    <div className={`px-1 truncate leading-tight ${isDay ? 'text-xs' : 'text-[10px] md:text-xs'}`}>
+    <div
+      className={`px-1 truncate leading-tight border-l-4 ${isDay ? 'text-xs' : 'text-[10px] md:text-xs'}`}
+      style={{ borderLeftColor: arg.event.extendedProps.assigneeColor }}
+    >
       <span className={`font-semibold mr-1 ${extra}`}>{arg.event.start && format(arg.event.start, TIME_FMT)}</span>
       <span className="font-medium">{arg.event.title}</span>
       <span className={`opacity-75 ${extra}`}> · {arg.event.extendedProps.assignee}</span>
@@ -173,6 +177,16 @@ const Calendar: React.FC = () => {
             <option value="completed">Completed</option>
             <option value="overdue">Overdue</option>
           </select>
+        </div>
+
+        {/* Assignee colour legend (chip left bar). Scrolls horizontally on narrow screens. */}
+        <div className="flex gap-3 overflow-x-auto text-xs text-gray-600">
+          {members.map(m => (
+            <span key={m.user_id} className="flex items-center gap-1 shrink-0">
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: userColor(m.user_id) }} />
+              {m.user_profile?.display_name || 'Unknown'}
+            </span>
+          ))}
         </div>
       </div>
 

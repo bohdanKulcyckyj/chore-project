@@ -15,6 +15,21 @@ export const STATUS_STYLE: Record<TaskWithAssignment['status'], { tw: string; bg
   unassigned: { tw: 'bg-purple-100 text-purple-800 border-purple-200', bg: '#f3e8ff', text: '#6b21a8' },
 };
 
+/**
+ * Per-user chip colour. ponytail: derived from the user id, not stored — no
+ * schema change, stable across sessions/devices, no assignment UI to maintain.
+ * Collisions are possible above ~8 members; add a `color` column on
+ * household_members if anyone actually hits that.
+ */
+const USER_COLORS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
+
+export const userColor = (userId?: string | null): string => {
+  if (!userId) return '#9ca3af'; // unassigned
+  let h = 0;
+  for (let i = 0; i < userId.length; i++) h = (h * 31 + userId.charCodeAt(i)) | 0;
+  return USER_COLORS[Math.abs(h) % USER_COLORS.length];
+};
+
 /** Canonical difficulty palette (Tasks page). */
 export const DIFFICULTY_STYLE: Record<Tables<'tasks'>['difficulty'], { tw: string }> = {
   easy: { tw: 'bg-green-100 text-green-800 border-green-200' },

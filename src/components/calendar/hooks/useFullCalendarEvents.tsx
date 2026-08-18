@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { EventInput } from '@fullcalendar/core';
 import { parseISO } from 'date-fns';
 import { deriveStatus, TaskWithAssignment } from '../../../lib/api/tasks';
-import { STATUS_STYLE } from '../../../lib/taskStyles';
+import { STATUS_STYLE, userColor } from '../../../lib/taskStyles';
 
 /**
  * Transform assignment rows into FullCalendar events.
@@ -18,14 +18,17 @@ export const useFullCalendarEvents = (
         .map(t => {
           // Colour by display status ('overdue'); the row itself keeps its real DB status.
           const colors = STATUS_STYLE[t.displayStatus ?? deriveStatus(t)];
+          // Fill still encodes status (overdue/done stay readable); the assignee
+          // shows as a thick left bar so both signals fit one chip.
+          const assigneeColor = userColor(t.assigned_to);
           return {
             id: `task-${t.id}`,
             title: t.task.name,
             start: parseISO(t.due_datetime as string),
             backgroundColor: colors.bg,
-            borderColor: t.task.category?.color || colors.bg,
+            borderColor: assigneeColor,
             textColor: colors.text,
-            extendedProps: { task: t, assignee: t.assigned_user?.display_name || 'Unassigned' },
+            extendedProps: { task: t, assignee: t.assigned_user?.display_name || 'Unassigned', assigneeColor },
           };
         }),
     [tasks]
