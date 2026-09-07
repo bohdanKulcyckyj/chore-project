@@ -8,7 +8,7 @@
  * - Supabase running locally (supabase start)
  * - Frontend dev server running (npm run dev)
  * - Test user created and authenticated
- * - At least one PDF receipt in receipts/kaufland/ or receipts/albert/
+ * - PDF receipts in receipts/<shop>/
  */
 
 import { test, expect } from "@playwright/test";
@@ -18,31 +18,27 @@ import { setupTestUserAndHousehold } from "./helpers/auth";
 
 const BASE_URL = "http://localhost:5173";
 
-// Find a test PDF receipt
-const findTestPDF = (): string | null => {
-  const candidates = [
-    "receipts/kaufland/20260815_211141.pdf",
-    "receipts/kaufland/20260815_211203.pdf",
-    "receipts/albert",
-    "receipts/kaufland",
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      if (candidate.endsWith(".pdf")) {
-        return candidate;
-      }
-      // It's a directory, find first PDF
-      const files = readdirSync(candidate);
-      const pdf = files.find((f: string) => f.endsWith(".pdf"));
-      if (pdf) return join(candidate, pdf);
-    }
-  }
-  return null;
+// Shop folder → the shop name its parser reports. Image-only folders (lidl)
+// are left out: browser OCR takes ~30s per receipt, and Node covers it.
+const SHOPS: Record<string, string> = {
+  albert: "Albert",
+  ikea: "IKEA",
+  kaufland: "Kaufland",
 };
 
+// One PDF per shop — enough to prove each parser runs in a real browser.
+const findTestPDFs = (): { shop: string; file: string }[] =>
+  Object.entries(SHOPS).flatMap(([folder, shop]) => {
+    const dir = join("receipts", folder);
+    if (!existsSync(dir)) return [];
+    const pdf = readdirSync(dir).find((f: string) => f.endsWith(".pdf"));
+    return pdf ? [{ shop, file: join(dir, pdf) }] : [];
+  });
+
+const num = (value: string): number => parseFloat(value.replace(",", "."));
+
 test.describe("PDF Receipt Upload and Parsing", () => {
-  const testPDF = findTestPDF();
+  const testPDFs = findTestPDFs();
 
   test.beforeEach(async ({ page }) => {
     // Enable verbose console logging
@@ -74,9 +70,9 @@ test.describe("PDF Receipt Upload and Parsing", () => {
   test("should upload PDF and extract receipt data without worker errors", async ({
     page,
   }) => {
-    test.skip(!testPDF, "No test PDF found in receipts/ folder");
+    test.skip(testPDFs.length === 0, "No test PDF found in receipts/ folder");
 
-    console.log("📄 Using test PDF:", testPDF);
+    console.log("📄 Using test PDFs:", testPDFs.map((p) => p.file).join(", "));
 
     // Step 1: Create test user and household
     console.log("🔧 Setting up test user and household...");
@@ -112,48 +108,50 @@ test.describe("PDF Receipt Upload and Parsing", () => {
     // Wait for modal/form to appear
     await page.waitForTimeout(1500);
 
-    console.log("📤 Uploading PDF file...");
-
-    // Upload the PDF file (the input is hidden but setInputFiles still works)
+    // The input is hidden but setInputFiles still works. Each upload replaces
+    // the form state, so one modal covers every shop.
     const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.setInputFiles(testPDF!);
+    const shopInput = page.locator('input[placeholder="e.g., Albert"]');
+    const totalInput = page.locator('input[placeholder^="Items sum"]');
+    const itemNames = page.locator('input[placeholder="Item name"]');
+    const itemPrices = page.locator('input[title="Price (Kč)"]');
 
-    console.log("⏳ Waiting for PDF parsing...");
+    for (const { shop, file } of testPDFs) {
+      console.log(`📤 Uploading ${file}...`);
+      await fileInput.setInputFiles(file);
 
-    // Wait for parsing to complete (look for "Reading receipt…" to disappear)
-    await expect(page.locator("text=Reading receipt…"))
-      .toBeVisible({ timeout: 2000 })
-      .catch(() => {});
-    await expect(page.locator("text=Reading receipt…")).not.toBeVisible({
-      timeout: 60000,
-    });
+      // Wait for parsing to complete (look for "Reading receipt…" to disappear)
+      await expect(page.locator("text=Reading receipt…"))
+        .toBeVisible({ timeout: 2000 })
+        .catch(() => {});
+      await expect(page.locator("text=Reading receipt…")).not.toBeVisible({
+        timeout: 60000,
+      });
 
-    console.log("✅ Parsing completed");
+      // Right parser picked, and it filled the form
+      await expect(shopInput).toHaveValue(shop);
+      const total = num(await totalInput.inputValue());
+      expect(total).toBeGreaterThan(0);
+      expect(await itemNames.count()).toBeGreaterThan(0);
 
-    // Give it a moment for the form to populate
-    await page.waitForTimeout(1000);
+      // Same gate as the Node pipeline test: every item named and priced,
+      // |Σ item totals − receipt total| < 0.01 Kč
+      const names = await itemNames.evaluateAll((els) =>
+        (els as HTMLInputElement[]).map((el) => el.value),
+      );
+      const prices = await itemPrices.evaluateAll((els) =>
+        (els as HTMLInputElement[]).map((el) => el.value),
+      );
+      for (const name of names) expect(name).not.toBe("");
+      const sum = prices.reduce((s, p) => s + num(p), 0);
+      expect(Math.abs(sum - total)).toBeLessThan(0.01);
 
-    // Take a screenshot for debugging
-    await page.screenshot({
-      path: "e2e/screenshots/pdf-upload-result.png",
-      fullPage: true,
-    });
-    console.log("📸 Screenshot saved to e2e/screenshots/pdf-upload-result.png");
-
-    // Check page content for error messages
-    const errorToast = page
-      .locator("text=/.*failed.*/i, text=/.*error.*/i")
-      .first();
-    const hasError = (await errorToast.count()) > 0;
-
-    if (hasError) {
-      const errorText = await errorToast.textContent();
-      console.error("❌ Error toast found:", errorText);
+      console.log(`✅ ${shop}: ${names.length} items, total ${total}`);
+      await page.screenshot({
+        path: `e2e/screenshots/pdf-upload-${shop.toLowerCase()}.png`,
+        fullPage: true,
+      });
     }
-
-    // The test passes if we got this far without exceptions
-    // In a real test, you'd verify the extracted data matches expected values
-    console.log("✅ PDF upload test completed");
   });
 
   test("should log worker configuration status", async ({ page }) => {

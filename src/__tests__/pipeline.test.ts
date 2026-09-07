@@ -10,6 +10,7 @@ import { detectParser } from "../lib/receipts/parsers";
 const RECEIPTS_DIR = join(process.cwd(), "receipts");
 const SHOPS: Record<string, string> = {
   albert: "Albert",
+  ikea: "IKEA",
   kaufland: "Kaufland",
   lidl: "Lidl",
 };

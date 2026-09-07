@@ -9,3 +9,5 @@ dist/**
 # tesseract.js traineddata cache
 *.traineddata
 .playwright-mcp
+# playwright run artifacts
+e2e/screenshots
