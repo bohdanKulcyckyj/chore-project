@@ -1,29 +1,33 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Calendar, Trophy, CheckSquare, Clock } from 'lucide-react';
+import { Plus, Calendar, Receipt, CheckSquare, Clock } from 'lucide-react';
 
-const QuickActions: React.FC = () => {
+interface QuickActionsProps {
+  onNavigate: (tab: string) => void;
+}
+
+const QuickActions: React.FC<QuickActionsProps> = ({ onNavigate }) => {
   const actions = [
     {
       title: 'Complete Task',
       description: 'Mark a task as done',
       icon: <CheckSquare className="w-5 h-5" />,
       color: 'from-green-500 to-emerald-500',
-      onClick: () => console.log('Complete task'),
+      onClick: () => onNavigate('tasks'),
     },
     {
       title: 'View Calendar',
       description: 'See upcoming tasks',
       icon: <Calendar className="w-5 h-5" />,
       color: 'from-blue-500 to-indigo-500',
-      onClick: () => console.log('View calendar'),
+      onClick: () => onNavigate('calendar'),
     },
     {
-      title: 'Check Leaderboard',
-      description: 'See household rankings',
-      icon: <Trophy className="w-5 h-5" />,
-      color: 'from-yellow-500 to-orange-500',
-      onClick: () => console.log('Check leaderboard'),
+      title: 'Record Receipt',
+      description: 'Log a shop purchase',
+      icon: <Receipt className="w-5 h-5" />,
+      color: 'from-teal-500 to-emerald-500',
+      onClick: () => onNavigate('budget'),
     },
     {
       title: 'Task History',

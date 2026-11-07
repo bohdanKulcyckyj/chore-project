@@ -25,7 +25,11 @@ interface DashboardStats {
   totalMembers: number;
 }
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onNavigate: (tab: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { currentHousehold, members } = useHousehold();
   const [stats, setStats] = useState<DashboardStats>({
@@ -164,7 +168,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Quick Actions */}
-      <QuickActions />
+      <QuickActions onNavigate={onNavigate} />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">

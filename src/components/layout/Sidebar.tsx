@@ -63,11 +63,11 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <motion.div
-      initial={{ x: -280 }}
-      animate={{ x: isOpen ? 0 : -280 }}
+      initial={{ x: '-100%' }}
+      animate={{ x: isOpen ? 0 : '-100%' }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className={`fixed left-0 top-0 h-full w-70 bg-white shadow-xl z-40 flex flex-col ${
-        isMobile ? 'md:hidden' : 'hidden md:flex'
+      className={`fixed left-0 top-0 h-full bg-white shadow-xl z-40 flex flex-col ${
+        isMobile ? 'w-full md:hidden' : 'w-70 hidden md:flex'
       }`}
     >
       {/* Header */}

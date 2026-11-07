@@ -120,8 +120,12 @@ const AppContent: React.FC = () => {
         {/* Mobile Header with Hamburger */}
         {isMobile && (
           <div className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm p-4 flex items-center justify-between md:hidden">
+            <div className="w-10" /> {/* Spacer for centering */}
+            <h1 className="font-bold text-gray-900">ChoreQuest</h1>
+            {/* ponytail: toggle sits right — thumb reach; drawer still slides from the left */}
             <button
               onClick={toggleSidebar}
+              aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               {sidebarOpen ? (
@@ -130,13 +134,11 @@ const AppContent: React.FC = () => {
                 <Menu className="w-6 h-6 text-gray-600" />
               )}
             </button>
-            <h1 className="font-bold text-gray-900">ChoreQuest</h1>
-            <div className="w-10" /> {/* Spacer for centering */}
           </div>
         )}
         
         <main className={`min-h-screen ${isMobile ? 'pt-20' : ''}`}>
-          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
           {activeTab === 'tasks' && <TaskManagement />}
           {activeTab === 'approvals' && <Approvals />}
           {activeTab === 'household' && <Household />}
