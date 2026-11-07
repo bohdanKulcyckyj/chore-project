@@ -179,6 +179,10 @@ const App: React.FC = () => {
                 background: '#363636',
                 color: '#fff',
                 borderRadius: '12px',
+                // ponytail: a toast sits at z-9999 with pointer-events:auto and
+                // eats every tap underneath it for its whole duration. Nothing
+                // here is clickable, so turn the toast into glass.
+                pointerEvents: 'none',
               },
             }}
           />
