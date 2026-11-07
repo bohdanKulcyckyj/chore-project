@@ -8,6 +8,11 @@ import { extractText } from "../lib/receipts/extractText";
 import { detectParser } from "../lib/receipts/parsers";
 
 const RECEIPTS_DIR = join(process.cwd(), "receipts");
+// No `penny` entry: the only Penny photo we have (confidence 46, shot at an
+// angle) misreads one item price with no second reading to repair it from, so
+// it cannot meet the < 0.01 Kč gate below. penny.test.ts pins the parser
+// against that OCR text instead, shortfall and all. Add it here once a cleaner
+// photo exists — do not weaken the gate for the other shops.
 const SHOPS: Record<string, string> = {
   albert: "Albert",
   ikea: "IKEA",
