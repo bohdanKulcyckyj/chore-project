@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavLink, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Home, 
@@ -18,22 +19,22 @@ import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 
 interface SidebarProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
   isOpen: boolean;
   onClose: () => void;
   isMobile: boolean;
 }
 
+// NavLink needs the motion props, and motion needs NavLink's `to`/render-prop.
+const MotionNavLink = motion.create(NavLink);
+
 const Sidebar: React.FC<SidebarProps> = ({ 
-  activeTab, 
-  onTabChange, 
   isOpen, 
   onClose, 
   isMobile 
 }) => {
   const { signOut } = useAuth();
   const { currentHousehold, isAdmin } = useHousehold();
+  const { householdId } = useParams<{ householdId: string }>();
 
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'text-blue-500' },
@@ -105,27 +106,32 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 py-6">
         <nav className="px-4 space-y-2">
           {menuItems.map((item) => (
-            <motion.button
+            <MotionNavLink
               key={item.id}
+              to={`/h/${householdId}/${item.id}`}
+              onClick={onClose}
               whileHover={{ x: 4 }}
-              onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
-                activeTab === item.id
+              className={({ isActive }) => `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                isActive
                   ? 'bg-blue-50 text-blue-600 shadow-sm'
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
-              <item.icon 
-                className={`w-5 h-5 ${activeTab === item.id ? 'text-blue-500' : item.color}`} 
-              />
-              <span className="font-medium">{item.label}</span>
-              {activeTab === item.id && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="ml-auto w-2 h-2 bg-blue-500 rounded-full"
-                />
+              {({ isActive }) => (
+                <>
+                  <item.icon 
+                    className={`w-5 h-5 ${isActive ? 'text-blue-500' : item.color}`} 
+                  />
+                  <span className="font-medium">{item.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="ml-auto w-2 h-2 bg-blue-500 rounded-full"
+                    />
+                  )}
+                </>
               )}
-            </motion.button>
+            </MotionNavLink>
           ))}
         </nav>
 
@@ -156,19 +162,20 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom Navigation */}
       <div className="border-t border-gray-200 p-4 space-y-2">
         {bottomMenuItems.map((item) => (
-          <motion.button
+          <MotionNavLink
             key={item.id}
+            to={`/h/${householdId}/${item.id}`}
+            onClick={onClose}
             whileHover={{ x: 4 }}
-            onClick={() => onTabChange(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
-              activeTab === item.id
+            className={({ isActive }) => `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+              isActive
                 ? 'bg-blue-50 text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
             <item.icon className={`w-5 h-5 ${item.color}`} />
             <span className="font-medium">{item.label}</span>
-          </motion.button>
+          </MotionNavLink>
         ))}
 
         <motion.button

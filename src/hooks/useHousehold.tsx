@@ -37,7 +37,7 @@ interface HouseholdProviderProps {
 }
 
 export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [currentHousehold, setCurrentHousehold] = useState<Household | null>(null);
   const [households, setHouseholds] = useState<Household[]>([]);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
@@ -48,8 +48,8 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     member.user_id === user?.id && member.role === 'admin'
   );
 
-  const fetchHouseholds = async () => {
-    if (!user) return;
+  const fetchHouseholds = async (): Promise<string | undefined> => {
+    if (!user) return undefined;
     
     try {
       const { data: householdMembers, error } = await supabase
@@ -73,20 +73,26 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
       if (householdList.length > 0 && !currentHousehold) {
         setCurrentHousehold(householdList[0]);
       }
+
+      return currentHousehold?.id ?? householdList[0]?.id;
     } catch (error) {
       console.error('Error fetching households:', error);
+      return undefined;
     }
   };
 
-  const fetchMembers = async () => {
-    if (!currentHousehold) return;
+  // Takes the id explicitly: at boot `currentHousehold` is still null in this
+  // closure, and a page that renders before `members` lands shows "Unknown"
+  // assignees, "of 0" members, and the member view to an admin.
+  const fetchMembers = async (id = currentHousehold?.id) => {
+    if (!id) return;
 
     try {
       // Fetch household members
       const { data: membersData, error: membersError } = await supabase
         .from('household_members')
         .select('*')
-        .eq('household_id', currentHousehold.id);
+        .eq('household_id', id);
 
       if (membersError) throw membersError;
 
@@ -111,13 +117,20 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     }
   };
 
+  // ponytail: sequential, not Promise.all — fetchMembers needs the household
+  // fetchHouseholds settles on. Costs one extra round trip at boot and buys a
+  // correct first paint.
   const refreshData = async () => {
     setLoading(true);
-    await Promise.all([fetchHouseholds(), fetchMembers()]);
+    await fetchMembers(await fetchHouseholds());
     setLoading(false);
   };
 
   useEffect(() => {
+    // Auth decides whether there is a user at all. Reporting loading=false
+    // before it settles makes consumers read "loaded, no households", and the
+    // route layout then bounces a deep link back to the root loader.
+    if (authLoading) return;
     if (user) {
       refreshData();
     } else {
@@ -127,13 +140,19 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
       setLoading(false);
       materializedHouseholds.current.clear();
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const householdId = currentHousehold?.id;
   const userId = user?.id;
 
   useEffect(() => {
-    fetchMembers();
+    // No household yet (boot, or signed out) => nothing to fetch and, crucially,
+    // nothing to report: dropping `loading` here tells HouseholdLayout the
+    // context has settled while `households` is still empty, and it bounces the
+    // deep link to the root loader. refreshData owns `loading` at boot.
+    if (!householdId) return;
+    setLoading(true);
+    fetchMembers(householdId).finally(() => setLoading(false));
     // Fire-and-forget: materialize recurring task assignments once per household per session.
     // Marked in-flight synchronously (boot re-renders must not fire duplicate upserts);
     // unmarked on failure so a later switch back to this household retries.
@@ -148,14 +167,6 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
   }, [householdId, userId]);
 
   const createHousehold = async (name: string, description = '') => {
-    console.log('User object:', user);
-    console.log('User ID:', user?.id);
-    
-    // Check current session
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Current session:', session);
-    console.log('Session user ID:', session?.user?.id);
-    
     if (!user) return { error: { message: 'Not authenticated' } };
 
     try {
@@ -168,8 +179,6 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
         })
         .select()
         .single();
-        
-      console.log('Household creation result:', { household, error: householdError });
 
       if (householdError) throw householdError;
 
@@ -207,14 +216,6 @@ export const HouseholdProvider = ({ children }: HouseholdProviderProps) => {
     if (!user) return { error: { message: 'Not authenticated' } };
 
     try {
-      // First, let's see what households exist and their invite codes
-      const { data: allHouseholds } = await supabase
-        .from('households')
-        .select('id, name, invite_code');
-        
-      console.log('All households in database:', allHouseholds);
-      console.log('Looking for invite code:', inviteCode.trim());
-      
       // Find household by invite code
       const { data: household, error: findError } = await supabase
         .from('households')

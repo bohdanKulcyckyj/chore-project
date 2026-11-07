@@ -24,6 +24,19 @@ export interface PurchaseInput {
 export const formatCzk = (amount: number): string =>
   new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK' }).format(amount);
 
+// ponytail: loader read + revalidate() on mutation, no realtime; add if
+// simultaneous editing ever hurts
+export async function getPurchases(householdId: string): Promise<PurchaseWithItems[]> {
+  const { data, error } = await supabase
+    .from('purchases')
+    .select('*, purchase_items(*)')
+    .eq('household_id', householdId)
+    .order('purchased_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as PurchaseWithItems[];
+}
+
 export async function createPurchase(
   input: PurchaseInput,
   items: PurchaseItemInput[]

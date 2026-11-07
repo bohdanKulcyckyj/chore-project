@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Plus, Users, Code, ArrowLeft } from 'lucide-react';
 import { useHousehold } from '../../hooks/useHousehold';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 const HouseholdManager: React.FC = () => {
@@ -16,6 +16,16 @@ const HouseholdManager: React.FC = () => {
   
   const location = useLocation();
   const [view, setView] = useState<'main' | 'create' | 'join'>('main');
+  const navigate = useNavigate();
+
+  // This screen used to be rendered only while `currentHousehold` was null, so
+  // setting the context WAS the navigation. It is a real route now, so leaving
+  // it has to be explicit — otherwise a new user who just created a household
+  // is stuck here with no way into the app.
+  const enter = (householdId: string) => {
+    switchHousehold(householdId);
+    navigate(`/h/${householdId}/dashboard`);
+  };
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -43,12 +53,12 @@ const HouseholdManager: React.FC = () => {
 
     setLoading(true);
     try {
-      const { error } = await createHousehold(formData.name, formData.description);
+      const { data, error } = await createHousehold(formData.name, formData.description);
       if (error) throw error;
-      
+
       toast.success('Household created successfully!');
-      setView('main');
       setFormData({ name: '', description: '', inviteCode: '' });
+      if (data) enter(data.id);
     } catch (error) {
       toast.error((error as Error).message || 'Failed to create household');
     } finally {
@@ -68,8 +78,8 @@ const HouseholdManager: React.FC = () => {
       // Show appropriate message based on whether they joined or switched
       const message = result.message || 'Joined household successfully!';
       toast.success(message);
-      setView('main');
       setFormData({ name: '', description: '', inviteCode: '' });
+      if (result.data) enter(result.data.id);
     } catch (error) {
       toast.error((error as Error).message || 'Failed to join household');
     } finally {
@@ -176,7 +186,7 @@ const HouseholdManager: React.FC = () => {
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-transparent hover:border-gray-200'
                     }`}
-                    onClick={() => switchHousehold(household.id)}
+                    onClick={() => enter(household.id)}
                   >
                     <div className="flex items-center justify-between">
                       <div>

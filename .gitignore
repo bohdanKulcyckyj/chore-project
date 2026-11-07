@@ -11,3 +11,6 @@ dist/**
 .playwright-mcp
 # playwright run artifacts
 e2e/screenshots
+
+# TS incremental build artifacts (npx tsc -b)
+*.tsbuildinfo

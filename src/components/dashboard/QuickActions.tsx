@@ -1,33 +1,34 @@
 import React from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Calendar, Receipt, CheckSquare, Clock } from 'lucide-react';
 
-interface QuickActionsProps {
-  onNavigate: (tab: string) => void;
-}
+const QuickActions: React.FC = () => {
+  const navigate = useNavigate();
+  const { householdId } = useParams<{ householdId: string }>();
+  const go = (page: string) => () => navigate(`/h/${householdId}/${page}`);
 
-const QuickActions: React.FC<QuickActionsProps> = ({ onNavigate }) => {
   const actions = [
     {
       title: 'Complete Task',
       description: 'Mark a task as done',
       icon: <CheckSquare className="w-5 h-5" />,
       color: 'from-green-500 to-emerald-500',
-      onClick: () => onNavigate('tasks'),
+      onClick: go('tasks'),
     },
     {
       title: 'View Calendar',
       description: 'See upcoming tasks',
       icon: <Calendar className="w-5 h-5" />,
       color: 'from-blue-500 to-indigo-500',
-      onClick: () => onNavigate('calendar'),
+      onClick: go('calendar'),
     },
     {
       title: 'Record Receipt',
       description: 'Log a shop purchase',
       icon: <Receipt className="w-5 h-5" />,
       color: 'from-teal-500 to-emerald-500',
-      onClick: () => onNavigate('budget'),
+      onClick: go('budget'),
     },
     {
       title: 'Task History',

@@ -83,6 +83,58 @@ export async function fetchAssignmentsForTasks(
   return data ?? [];
 }
 
+/**
+ * Every row the Tasks page shows, sorted by due date (undated last): one row per recurring task
+ * (its current occurrence), every row of a one-off task, and a claimable `unassigned-<taskId>`
+ * placeholder for a one-off task that was never assigned. A recurring task with no row in the
+ * window (not started yet / ended) is omitted. `assigned_user` is left to attachAssignees.
+ * Throws on error.
+ */
+export async function fetchHouseholdTaskRows(householdId: string): Promise<TaskWithAssignment[]> {
+  const { data: allTasks, error } = await supabase
+    .from('tasks')
+    .select('*, category:task_categories(*)')
+    .eq('household_id', householdId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const assignments = await fetchAssignmentsForTasks(allTasks ?? []);
+  const byTask = new Map<string, typeof assignments>();
+  assignments.forEach(a => byTask.set(a.task_id, [...(byTask.get(a.task_id) ?? []), a]));
+
+  const combined: TaskWithAssignment[] = [];
+  (allTasks ?? []).forEach(task => {
+    const own = byTask.get(task.id) ?? [];
+    if (task.recurrence_type !== 'none') {
+      const current = pickCurrentOccurrence(own);
+      if (current) combined.push({ ...current, task });
+    } else if (own.length > 0) {
+      own.forEach(a => combined.push({ ...a, task }));
+    } else {
+      combined.push({
+        id: `unassigned-${task.id}`,
+        task_id: task.id,
+        task,
+        status: 'unassigned',
+        assigned_to: null,
+        assigned_by: null,
+        assigned_at: '', // UI-only placeholder row: never assigned
+        due_datetime: null,
+      });
+    }
+  });
+
+  combined.sort((a, b) => {
+    if (!a.due_datetime && !b.due_datetime) return 0;
+    if (!a.due_datetime) return 1;
+    if (!b.due_datetime) return -1;
+    return new Date(a.due_datetime).getTime() - new Date(b.due_datetime).getTime();
+  });
+
+  return combined;
+}
+
 const isOpen = (status: string): boolean => status === 'pending' || status === 'in_progress';
 
 /**

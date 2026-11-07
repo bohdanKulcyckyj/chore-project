@@ -25,7 +25,9 @@ export default tseslint.config(
       ],
       'react-refresh/only-export-components': [
         'warn',
-        { allowConstantExport: true },
+        // A route module exports its own loader/action beside the component —
+        // that is the data API's convention, not a Fast Refresh mistake.
+        { allowConstantExport: true, allowExportNames: ['loader', 'action'] },
       ],
     },
   }

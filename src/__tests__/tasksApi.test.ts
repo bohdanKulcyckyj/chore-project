@@ -52,12 +52,14 @@ import {
   deriveStatus,
   fetchAssignments,
   fetchAssignmentsForTasks,
+  fetchHouseholdTaskRows,
   isDueAfterToday,
   isDueBeyondLeadWindow,
   isOverdue,
   pickCurrentOccurrence,
   ASSIGNMENT_SELECT,
 } from '../lib/api/tasks';
+import { parseTaskForm } from '../components/tasks/TaskManagement';
 
 const now = new Date(2026, 7, 17, 20, 1); // local Aug 17 2026 20:01
 const local = (...args: [number, number, number, number?]) => new Date(...args).toISOString();
@@ -315,5 +317,140 @@ describe('completeTask', () => {
     mock.state.respond = () => ({ data: { ...assignment, assigned_to: 'u2' }, error: null });
     await expect(completeTask('a1', {})).rejects.toThrow('You are not assigned to this task');
     expect(calls('update', 'task_assignments')).toHaveLength(0);
+  });
+});
+
+describe('fetchHouseholdTaskRows', () => {
+  beforeEach(() => { mock.state.calls = []; });
+
+  // Relative to the real clock: pickCurrentOccurrence runs inside fetchHouseholdTaskRows with `new Date()`.
+  const day = (offset: number) => new Date(Date.now() + offset * 86400000).toISOString();
+  const task = (id: string, recurrence_type: string) => ({ id, recurrence_type, name: id });
+  const asg = (id: string, task_id: string, due_datetime: string | null, status = 'pending') =>
+    ({ id, task_id, due_datetime, status, assigned_to: 'u1' });
+
+  /** Serve the tasks query and the assignments query from fixed lists. */
+  const serve = (tasks: unknown[], assignments: unknown[]) => {
+    mock.state.respond = c => ({ data: c.table === 'tasks' ? tasks : assignments, error: null });
+  };
+
+  it('a recurring task yields exactly one row: its current occurrence', async () => {
+    serve([task('t1', 'daily')], [asg('a1', 't1', day(-8)), asg('a2', 't1', day(-1)), asg('a3', 't1', day(6))]);
+    const rows = await fetchHouseholdTaskRows('h1');
+    expect(rows.map(r => r.id)).toEqual(['a2']); // latest open row due by end of today
+    expect(rows[0].task).toMatchObject({ id: 't1' });
+    expect(mock.state.calls[0].filters).toEqual([['eq', 'household_id', 'h1'], ['eq', 'is_active', true]]);
+  });
+
+  it('a one-off task yields every one of its assignment rows', async () => {
+    serve([task('t1', 'none')], [asg('a1', 't1', day(-3)), asg('a2', 't1', day(1)), asg('a3', 't1', day(4), 'completed')]);
+    const rows = await fetchHouseholdTaskRows('h1');
+    expect(rows.map(r => r.id)).toEqual(['a1', 'a2', 'a3']);
+  });
+
+  it('a never-assigned one-off yields one claimable placeholder', async () => {
+    serve([task('t1', 'none')], []);
+    const rows = await fetchHouseholdTaskRows('h1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: 'unassigned-t1', status: 'unassigned', assigned_to: null, due_datetime: null });
+  });
+
+  it('a recurring task with no row in the window is omitted entirely', async () => {
+    serve([task('t1', 'weekly'), task('t2', 'none')], [asg('a1', 't2', day(2))]);
+    const rows = await fetchHouseholdTaskRows('h1');
+    expect(rows.map(r => r.id)).toEqual(['a1']);
+  });
+
+  it('sorts by due date with undated rows last', async () => {
+    serve(
+      [task('t1', 'none'), task('t2', 'none'), task('t3', 'daily')],
+      [asg('a1', 't2', day(5)), asg('a2', 't3', day(-1))]
+    );
+    const rows = await fetchHouseholdTaskRows('h1');
+    expect(rows.map(r => r.id)).toEqual(['a2', 'a1', 'unassigned-t1']);
+  });
+
+  it('throws on error', async () => {
+    mock.state.respond = () => ({ data: null, error: new Error('boom') });
+    await expect(fetchHouseholdTaskRows('h1')).rejects.toThrow('boom');
+  });
+});
+
+// Trust boundary for every submitted task FormData (TaskManagement's route action).
+// The messages are the ones the old in-modal validateForm used, verbatim.
+describe('parseTaskForm', () => {
+  /** FormData the way AddTaskModal builds it: arrays appended once per item. */
+  const fd = (fields: Record<string, string | string[]>) => {
+    const body = new FormData();
+    for (const [k, v] of Object.entries(fields)) {
+      if (Array.isArray(v)) v.forEach(x => body.append(k, x));
+      else body.set(k, v);
+    }
+    return body;
+  };
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 16);
+  const base = { name: 'Dishes', category_id: 'c1', estimated_duration: '15', points: '10', due_datetime: tomorrow };
+  const parse = (fields: Record<string, string | string[]>, isEdit = false) => parseTaskForm(fd(fields), isEdit);
+  const form = (fields: Record<string, string | string[]>, isEdit = false) => {
+    const r = parse(fields, isEdit);
+    if ('error' in r) throw new Error(`unexpected rejection: ${r.error}`);
+    return r.form;
+  };
+
+  it('reads a multi-value field with getAll, in order, dropping out-of-range days', () => {
+    const f = form({ ...base, repeat: 'WEEKLY', repeat_interval: '1', rotation_members: ['u1', 'u2'],
+      repeat_weekdays: ['6', '0', '3', '7', '-1'] });
+    expect(f.repeat_weekdays).toEqual([6, 0, 3]);
+    expect(f.rotation_members).toEqual(['u1', 'u2']);
+  });
+
+  it('rejects a non-numeric points instead of letting NaN through', () => {
+    expect(parse({ ...base, points: 'abc' })).toEqual({ error: 'Points must be greater than 0' });
+    expect(parse({ ...base, points: '' })).toEqual({ error: 'Points must be greater than 0' });
+    expect(parse({ ...base, points: '0' })).toEqual({ error: 'Points must be greater than 0' });
+    expect(parse({ ...base, estimated_duration: 'ten' })).toEqual({ error: 'Duration must be greater than 0' });
+  });
+
+  it('rejects empty required fields with the old in-modal messages', () => {
+    expect(parse({ ...base, name: '   ' })).toEqual({ error: 'Task name is required' });
+    expect(parse({ ...base, name: 'ab' })).toEqual({ error: 'Task name must be at least 3 characters' });
+    expect(parse({ ...base, category_id: '' })).toEqual({ error: 'Please select a category' });
+    expect(parse({ ...base, due_datetime: '' })).toEqual({ error: 'Please set a due date' });
+    expect(parse({ ...base, due_datetime: 'not a date' })).toEqual({ error: 'Please set a due date' });
+    expect(parse({ ...base, due_datetime: '2020-01-01T09:00' })).toEqual({ error: 'Due date must be today or in the future' });
+    // assignment stays optional: an unassigned task is claimable
+    expect(form(base).assigned_to).toBe('');
+  });
+
+  it('recurrence rules apply only when repeat is set', () => {
+    const rec = { ...base, repeat: 'WEEKLY', repeat_interval: '1', rotation_members: ['u1'] };
+    expect(parse({ ...rec, repeat_interval: '0' })).toEqual({ error: 'Repeat interval must be at least 1' });
+    expect(parse({ ...rec, repeat_interval: 'x' })).toEqual({ error: 'Repeat interval must be at least 1' });
+    expect(parse({ ...rec, rotation_members: [] })).toEqual({ error: 'Select at least one member for the rotation' });
+    expect(parse({ ...rec, repeat_until: '2020-01-01' })).toEqual({ error: 'End date must be on or after the due date' });
+    // same garbage interval / empty rotation is ignored for a one-off
+    expect(form({ ...base, repeat_interval: '0', rotation_members: [] }).repeat).toBe('');
+  });
+
+  it('edit mode skips every scheduling rule but still guards name/category/duration/points', () => {
+    expect(form({ name: 'Dishes', category_id: 'c1', estimated_duration: '15', points: '10' }, true))
+      .toMatchObject({ name: 'Dishes', due_datetime: '' });
+    // a past due date and a bad interval are not even looked at in edit mode
+    expect(form({ ...base, due_datetime: '2020-01-01T09:00', repeat: 'WEEKLY', repeat_interval: '0' }, true).name).toBe('Dishes');
+    // fields it was not given cannot be blanked past the guards
+    expect(parse({ ...base, name: '' }, true)).toEqual({ error: 'Task name is required' });
+    expect(parse({ ...base, category_id: '' }, true)).toEqual({ error: 'Please select a category' });
+    expect(parse({ ...base, points: '' }, true)).toEqual({ error: 'Points must be greater than 0' });
+  });
+
+  it('falls back to the allow-listed defaults for an off-list difficulty or repeat', () => {
+    expect(form({ ...base, difficulty: 'hard' }).difficulty).toBe('hard');
+    expect(form({ ...base, difficulty: 'IMPOSSIBLE' }).difficulty).toBe('medium');
+    expect(form({ ...base, difficulty: 'Easy' }).difficulty).toBe('medium'); // case-sensitive allow-list
+    expect(form({ ...base, repeat: 'WEEKLY', repeat_interval: '1', rotation_members: ['u1'] }).repeat).toBe('WEEKLY');
+    // off-list repeat is refused, not silently downgraded to a one-off
+    expect(parse({ ...base, repeat: 'yearly' })).toEqual({ error: 'Invalid repeat frequency' });
+    expect(form({ ...base, repeat: '' }).repeat).toBe(''); // absent is still a plain one-off
+    expect(form({ ...base, requires_approval: 'yes' }).requires_approval).toBe(false); // only 'true' is true
   });
 });

@@ -10,7 +10,6 @@ import TaskDetailModal from '../tasks/TaskDetailModal';
 
 interface TodaysTasksProps {
   tasks: TaskWithAssignment[];
-  onTaskUpdate: () => void;
 }
 
 const TodaysTasks: React.FC<TodaysTasksProps> = ({ tasks }) => {

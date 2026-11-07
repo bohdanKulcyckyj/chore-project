@@ -786,10 +786,6 @@ const TaskTableShadcn: React.FC<TaskTableProps> = ({
           isOpen={!!editTask}
           task={editTask}
           onClose={() => setEditTask(null)}
-          onTaskCreated={() => {
-            setEditTask(null);
-            onTaskUpdate?.();
-          }}
         />
       )}
 

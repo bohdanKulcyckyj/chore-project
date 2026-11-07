@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Home, Sparkles } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
-interface AuthFormProps {
-  mode: 'signin' | 'signup';
-  onModeChange: (mode: 'signin' | 'signup') => void;
-}
-
-const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange }) => {
+const AuthForm: React.FC = () => {
   const { signIn, signUp } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const invite = searchParams.get('invite');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -32,10 +32,18 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange }) => {
         if (!formData.displayName.trim()) {
           throw new Error('Display name is required');
         }
-        const { error } = await signUp(formData.email, formData.password, formData.displayName);
+        const { data, error } = await signUp(formData.email, formData.password, formData.displayName);
         if (error) throw error;
+        // Email confirmation on => no session yet, so there is nowhere to go.
+        if (!data.session) {
+          toast.success('Account created. Check your email to confirm it, then sign in.');
+          setMode('signin');
+          return;
+        }
         toast.success('Account created successfully!');
       }
+      // An invite goes straight to the join form; otherwise `/` resolves the household.
+      navigate(invite ? `/households?invite=${encodeURIComponent(invite)}` : '/', { replace: true });
     } catch (error) {
       toast.error((error as Error).message || 'Authentication failed');
     } finally {
@@ -161,7 +169,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange }) => {
               {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
               <button
                 type="button"
-                onClick={() => onModeChange(mode === 'signin' ? 'signup' : 'signin')}
+                onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
                 className="text-blue-500 hover:text-blue-600 font-semibold ml-1 transition-colors"
               >
                 {mode === 'signin' ? 'Sign up' : 'Sign in'}

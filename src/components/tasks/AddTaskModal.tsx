@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFetcher } from 'react-router-dom';
 import { 
   X, 
   Calendar, 
@@ -12,10 +13,9 @@ import {
   AlertCircle,
   Repeat
 } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase, Tables } from '../../lib/supabase';
-import { buildPattern, getRecurrenceText, materializeTask } from '../../lib/recurrence';
+import { buildPattern, getRecurrenceText } from '../../lib/recurrence';
 import { DIFFICULTY_STYLE } from '../../lib/taskStyles';
 import toast from 'react-hot-toast';
 
@@ -23,17 +23,21 @@ type HouseholdMember = Tables<'household_members'> & {
   user_profile?: Tables<'user_profiles'>;
 };
 
+/** What the `/h/:householdId/tasks` action answers with; `tone` picks the toast. */
+export type TaskActionResult =
+  | { error: string }
+  | { ok: string; tone?: 'plain' | 'error' };
+
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onTaskCreated: () => void;
   /** Present = edit mode. ponytail: edit covers metadata only (name, description,
    * category, difficulty, duration, points, approval); recurrence/assignment edits
    * need re-materialization of occurrences, add when asked. */
   task?: Tables<'tasks'>;
 }
 
-interface FormData {
+export interface TaskFormData {
   name: string;
   description: string;
   category_id: string;
@@ -52,7 +56,7 @@ interface FormData {
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const emptyForm: FormData = {
+const emptyForm: TaskFormData = {
   name: '',
   description: '',
   category_id: '',
@@ -69,12 +73,32 @@ const emptyForm: FormData = {
   rotation_members: [],
 };
 
-const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCreated, task }) => {
-  const { user } = useAuth();
-  const { currentHousehold, members: householdMembers } = useHousehold();
-  const [loading, setLoading] = useState(false);
+/**
+ * The recurrence pattern this form describes. Exported because the tasks route action writes the
+ * very pattern the form previews — one builder, so preview and stored rule cannot drift.
+ */
+// Shared with the tasks route action so the live preview and the stored rule
+// cannot drift. Not a component, so Fast Refresh's advice does not apply here.
+// eslint-disable-next-line react-refresh/only-export-components
+export const buildRecurrencePattern = (
+  f: Pick<TaskFormData, 'repeat' | 'repeat_interval' | 'repeat_weekdays' | 'repeat_until' | 'due_datetime' | 'rotation_members'>
+) => ({
+  ...buildPattern({
+    freq: f.repeat as 'DAILY' | 'WEEKLY' | 'MONTHLY',
+    interval: f.repeat_interval,
+    byweekday: f.repeat === 'WEEKLY' ? f.repeat_weekdays : undefined,
+    // End-of-day local so the end date itself is included
+    until: f.repeat_until ? new Date(`${f.repeat_until}T23:59:59`) : undefined,
+    dtstart: new Date(f.due_datetime),
+  }),
+  rotation: { members: f.rotation_members },
+});
+
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, task }) => {
+  const { members: householdMembers } = useHousehold();
+  const fetcher = useFetcher<TaskActionResult>();
   const [categories, setCategories] = useState<Tables<'task_categories'>[]>([]);
-  const [formData, setFormData] = useState<FormData>(emptyForm);
+  const [formData, setFormData] = useState<TaskFormData>(emptyForm);
   const isEdit = !!task;
 
   // Fetch categories on mount
@@ -110,7 +134,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
     }
   };
 
-  const handleInputChange = (field: keyof FormData, value: string | number | boolean | number[] | string[]) => {
+  const handleInputChange = (field: keyof TaskFormData, value: string | number | boolean | number[] | string[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -119,158 +143,41 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
 
   const isRecurring = formData.repeat !== '';
 
-  const buildRecurrencePattern = () => ({
-    ...buildPattern({
-      freq: formData.repeat as 'DAILY' | 'WEEKLY' | 'MONTHLY',
-      interval: formData.repeat_interval,
-      byweekday: formData.repeat === 'WEEKLY' ? formData.repeat_weekdays : undefined,
-      // End-of-day local so the end date itself is included
-      until: formData.repeat_until ? new Date(`${formData.repeat_until}T23:59:59`) : undefined,
-      dtstart: new Date(formData.due_datetime),
-    }),
-    rotation: { members: formData.rotation_members },
-  });
-
   const recurrencePreview = (() => {
     if (!isRecurring || !formData.due_datetime) return '';
     try {
-      return getRecurrenceText(buildRecurrencePattern());
+      return getRecurrenceText(buildRecurrencePattern(formData));
     } catch {
       return '';
     }
   })();
 
-  const validateForm = (): string | null => {
-    if (!formData.name.trim()) return 'Task name is required';
-    if (formData.name.trim().length < 3) return 'Task name must be at least 3 characters';
-    if (!formData.category_id) return 'Please select a category';
-    // Assignment is now optional - removed assigned_to validation
-    if (formData.estimated_duration <= 0) return 'Duration must be greater than 0';
-    if (formData.points <= 0) return 'Points must be greater than 0';
-    // Edit mode never touches scheduling, so skip every due-date/recurrence rule
-    if (isEdit) return null;
-    if (!formData.due_datetime) return 'Please set a due date';
-    if (isRecurring) {
-      if (formData.repeat_interval < 1) return 'Repeat interval must be at least 1';
-      if (formData.rotation_members.length === 0) return 'Select at least one member for the rotation';
-      if (formData.repeat_until && formData.repeat_until < formData.due_datetime.slice(0, 10)) {
-        return 'End date must be on or after the due date';
-      }
+  const submitting = fetcher.state !== 'idle';
+
+  // The action owns validation and the writes; we only react to its answer.
+  useEffect(() => {
+    const result = fetcher.data;
+    if (submitting || !result) return;
+    if ('error' in result) {
+      toast.error(result.error);
+      return;
     }
+    (result.tone === 'error' ? toast.error : result.tone === 'plain' ? toast : toast.success)(result.ok);
+    onClose();
+    // onClose is a fresh closure every render; the result identity is what gates this
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher.data, submitting]);
 
-    // Check if due date is in the future
-    const dueDate = new Date(formData.due_datetime);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (dueDate < today) return 'Due date must be today or in the future';
-
-    return null;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const validationError = validateForm();
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
-
-    if (!user || !currentHousehold) {
-      toast.error('Authentication error');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      if (task) {
-        const { error } = await supabase
-          .from('tasks')
-          .update({
-            name: formData.name.trim(),
-            description: formData.description.trim(),
-            category_id: formData.category_id || null,
-            difficulty: formData.difficulty,
-            estimated_duration: formData.estimated_duration,
-            points: formData.points,
-            requires_approval: formData.requires_approval,
-          })
-          .eq('id', task.id);
-
-        if (error) throw error;
-        toast.success('Task updated successfully!');
-        onTaskCreated();
-        onClose();
-        return;
-      }
-
-      // Create the task
-      const { data: newTask, error: taskError } = await supabase
-        .from('tasks')
-        .insert({
-          household_id: currentHousehold.id,
-          name: formData.name.trim(),
-          description: formData.description.trim(),
-          category_id: formData.category_id || null,
-          difficulty: formData.difficulty,
-          estimated_duration: formData.estimated_duration,
-          points: formData.points,
-          assignment_type: isRecurring
-            ? (formData.rotation_members.length > 1 ? 'rotating' : 'fixed')
-            : (formData.assigned_to ? 'fixed' : 'flexible'),
-          requires_approval: formData.requires_approval,
-          created_by: user.id,
-          recurrence_type: isRecurring
-            ? (formData.repeat.toLowerCase() as 'daily' | 'weekly' | 'monthly')
-            : 'none',
-          recurrence_pattern: isRecurring ? buildRecurrencePattern() : {},
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (taskError) throw taskError;
-
-      if (isRecurring) {
-        try {
-          const count = await materializeTask(newTask, supabase);
-          if (count === 0) {
-            toast('Task created — no occurrences fall in the next 4 weeks');
-          } else {
-            toast.success(`Task created — ${count} occurrence${count === 1 ? '' : 's'} scheduled`);
-          }
-        } catch (err) {
-          // Task row exists; only scheduling failed — still close/refresh
-          toast.error(`Task created but scheduling failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      } else {
-        // Create the task assignment only if someone is assigned
-        if (formData.assigned_to) {
-          const { error: assignmentError } = await supabase
-            .from('task_assignments')
-            .insert({
-              task_id: newTask.id,
-              assigned_to: formData.assigned_to,
-              // datetime-local is a local wall-clock string; convert to a real
-              // instant so timestamptz doesn't misread it as UTC
-              due_datetime: new Date(formData.due_datetime).toISOString(),
-              assigned_by: user.id,
-              status: 'pending',
-            });
-
-          if (assignmentError) throw assignmentError;
-        }
-        toast.success('Task created successfully!');
-      }
-      onTaskCreated();
-      onClose();
-    } catch (error: unknown) {
-      console.error('Error saving task:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to save task');
-    } finally {
-      setLoading(false);
-    }
+    const body = new FormData();
+    Object.entries(formData).forEach(([key, value]) =>
+      Array.isArray(value)
+        ? value.forEach(item => body.append(key, String(item)))
+        : body.set(key, String(value))
+    );
+    if (task) body.set('taskId', task.id);
+    fetcher.submit(body, { method: 'post' });
   };
 
   const getDifficultyIcon = (difficulty: string) => {
@@ -485,7 +392,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                     <select
                       value={formData.repeat}
                       onChange={(e) => {
-                        const repeat = e.target.value as FormData['repeat'];
+                        const repeat = e.target.value as TaskFormData['repeat'];
                         // Assign-To sits above Repeat: carry the chosen assignee into the rotation
                         setFormData(prev => ({
                           ...prev,
@@ -649,10 +556,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
                   </button>
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={submitting}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-emerald-500 text-white rounded-xl hover:from-blue-600 hover:to-emerald-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {loading ? (
+                    {submitting ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>

@@ -1,141 +1,196 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { CheckSquare, Plus, Download, Upload, Users } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import {
+  useLoaderData,
+  useRevalidator,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from 'react-router-dom';
 import { useHousehold } from '../../hooks/useHousehold';
 import { supabase } from '../../lib/supabase';
+import { materializeTask } from '../../lib/recurrence';
+import { requireUser } from '../../lib/api/session';
 import {
   attachAssignees,
   deriveStatus,
-  fetchAssignmentsForTasks,
-  pickCurrentOccurrence,
+  fetchHouseholdTaskRows,
   TaskWithAssignment,
 } from '../../lib/api/tasks';
 import TaskTable from './TaskTable';
-import AddTaskModal from './AddTaskModal';
+import AddTaskModal, { buildRecurrencePattern, type TaskActionResult, type TaskFormData } from './AddTaskModal';
 import AdminGuard from '../auth/AdminGuard';
 import RoleBasedComponent from '../auth/RoleBasedComponent';
 import AvailableTasksView from './AvailableTasksView';
 import PersonalTaskStats from './PersonalTaskStats';
 
+export async function loader({ params }: LoaderFunctionArgs) {
+  await requireUser();
+  // A throw here lands on the route errorElement — no second error UI in the component.
+  return { rows: await fetchHouseholdTaskRows(params.householdId!) };
+}
+
+const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+const FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const;
+
+/**
+ * Trust boundary: the submitted FormData is strings from the network, so every field is coerced
+ * and checked here (the modal's HTML constraints are UX only). Returns the message the modal
+ * shows, or the validated form.
+ */
+// Exported so the trust boundary can be unit-tested (src/__tests__/tasksApi.test.ts).
+// Not a component, so Fast Refresh's "use a new file" advice does not apply.
+// eslint-disable-next-line react-refresh/only-export-components
+export function parseTaskForm(body: FormData, isEdit: boolean): { error: string } | { form: TaskFormData } {
+  const str = (k: string) => String(body.get(k) ?? '').trim();
+  const num = (k: string) => Number(body.get(k));
+  const form: TaskFormData = {
+    name: str('name'),
+    description: str('description'),
+    category_id: str('category_id'),
+    assigned_to: str('assigned_to'),
+    due_datetime: str('due_datetime'),
+    difficulty: DIFFICULTIES.find(d => d === str('difficulty')) ?? 'medium',
+    estimated_duration: num('estimated_duration'),
+    points: num('points'),
+    requires_approval: str('requires_approval') === 'true',
+    repeat: FREQUENCIES.find(f => f === str('repeat')) ?? '',
+    repeat_interval: num('repeat_interval'),
+    repeat_weekdays: body.getAll('repeat_weekdays').map(Number).filter(n => n >= 0 && n <= 6),
+    repeat_until: str('repeat_until'),
+    rotation_members: body.getAll('rotation_members').map(String).filter(Boolean),
+  };
+
+  if (!form.name) return { error: 'Task name is required' };
+  if (form.name.length < 3) return { error: 'Task name must be at least 3 characters' };
+  if (!form.category_id) return { error: 'Please select a category' };
+  // Assignment is optional: an unassigned task is claimable
+  if (!Number.isFinite(form.estimated_duration) || form.estimated_duration <= 0) {
+    return { error: 'Duration must be greater than 0' };
+  }
+  if (!Number.isFinite(form.points) || form.points <= 0) return { error: 'Points must be greater than 0' };
+  // An off-list `repeat` used to fall back to '' and skip the whole recurrence
+  // block, so a stale client asking for a recurring task silently got a one-off
+  // plus a success toast. Refuse instead of storing something else.
+  if (str('repeat') && !form.repeat) return { error: 'Invalid repeat frequency' };
+  // Edit mode never touches scheduling, so skip every due-date/recurrence rule
+  if (isEdit) return { form };
+  if (!form.due_datetime || Number.isNaN(new Date(form.due_datetime).getTime())) {
+    return { error: 'Please set a due date' };
+  }
+  if (form.repeat) {
+    if (!Number.isFinite(form.repeat_interval) || form.repeat_interval < 1) {
+      return { error: 'Repeat interval must be at least 1' };
+    }
+    if (form.rotation_members.length === 0) return { error: 'Select at least one member for the rotation' };
+    if (form.repeat_until && form.repeat_until < form.due_datetime.slice(0, 10)) {
+      return { error: 'End date must be on or after the due date' };
+    }
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (new Date(form.due_datetime) < today) return { error: 'Due date must be today or in the future' };
+
+  return { form };
+}
+
+/** Create a task (+ its occurrences / first assignment), or update an existing one's metadata. */
+export async function action({ request, params }: ActionFunctionArgs): Promise<TaskActionResult> {
+  const user = await requireUser();
+  const body = await request.formData();
+  const taskId = String(body.get('taskId') ?? '');
+  const parsed = parseTaskForm(body, !!taskId);
+  if ('error' in parsed) return parsed;
+  const form = parsed.form;
+  const metadata = {
+    name: form.name,
+    description: form.description,
+    category_id: form.category_id || null,
+    difficulty: form.difficulty,
+    estimated_duration: form.estimated_duration,
+    points: form.points,
+    requires_approval: form.requires_approval,
+  };
+
+  try {
+    if (taskId) {
+      const { error } = await supabase.from('tasks').update(metadata).eq('id', taskId);
+      if (error) throw error;
+      return { ok: 'Task updated successfully!' };
+    }
+
+    const { data: newTask, error: taskError } = await supabase
+      .from('tasks')
+      .insert({
+        ...metadata,
+        household_id: params.householdId!,
+        assignment_type: form.repeat
+          ? (form.rotation_members.length > 1 ? 'rotating' : 'fixed')
+          : (form.assigned_to ? 'fixed' : 'flexible'),
+        created_by: user.id,
+        recurrence_type: form.repeat
+          ? (form.repeat.toLowerCase() as 'daily' | 'weekly' | 'monthly')
+          : 'none',
+        recurrence_pattern: form.repeat ? buildRecurrencePattern(form) : {},
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (taskError) throw taskError;
+
+    if (form.repeat) {
+      try {
+        const count = await materializeTask(newTask, supabase);
+        return count === 0
+          ? { ok: 'Task created — no occurrences fall in the next 4 weeks', tone: 'plain' }
+          : { ok: `Task created — ${count} occurrence${count === 1 ? '' : 's'} scheduled` };
+      } catch (err) {
+        // Task row exists; only scheduling failed — still close/refresh, but say so
+        return {
+          ok: `Task created but scheduling failed: ${err instanceof Error ? err.message : String(err)}`,
+          tone: 'error',
+        };
+      }
+    }
+
+    // Create the task assignment only if someone is assigned
+    if (form.assigned_to) {
+      const { error: assignmentError } = await supabase.from('task_assignments').insert({
+        task_id: newTask.id,
+        assigned_to: form.assigned_to,
+        // datetime-local is a local wall-clock string; convert to a real
+        // instant so timestamptz doesn't misread it as UTC
+        due_datetime: new Date(form.due_datetime).toISOString(),
+        assigned_by: user.id,
+        status: 'pending',
+      });
+      if (assignmentError) throw assignmentError;
+    }
+    return { ok: 'Task created successfully!' };
+  } catch (error: unknown) {
+    console.error('Error saving task:', error);
+    return { error: error instanceof Error ? error.message : 'Failed to save task' };
+  }
+}
+
 const TaskManagement: React.FC = () => {
-  const { user } = useAuth();
+  const { rows } = useLoaderData() as Awaited<ReturnType<typeof loader>>;
   const { currentHousehold, members } = useHousehold();
-  const [rows, setRows] = useState<TaskWithAssignment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const revalidator = useRevalidator();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Resolve assignees from the household context (members may arrive after the rows)
   const tasks: TaskWithAssignment[] = useMemo(() => attachAssignees(rows, members), [rows, members]);
 
-  const fetchTasks = async () => {
-    if (!user || !currentHousehold) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data: allTasks, error: tasksError } = await supabase
-        .from('tasks')
-        .select(`
-          *,
-          category:task_categories(*)
-        `)
-        .eq('household_id', currentHousehold.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (tasksError) {
-        throw tasksError;
-      }
-
-      const assignments = await fetchAssignmentsForTasks(allTasks ?? []);
-      const byTask = new Map<string, typeof assignments>();
-      assignments.forEach(a => byTask.set(a.task_id, [...(byTask.get(a.task_id) ?? []), a]));
-
-      // One row per recurring task (its current occurrence); every row of a one-off task;
-      // a claimable 'unassigned' placeholder for a one-off task that was never assigned.
-      // A recurring task with no row in the window (not started yet / ended) is omitted.
-      const combined: TaskWithAssignment[] = [];
-      (allTasks ?? []).forEach(task => {
-        const own = byTask.get(task.id) ?? [];
-        if (task.recurrence_type !== 'none') {
-          const current = pickCurrentOccurrence(own);
-          if (current) combined.push({ ...current, task });
-        } else if (own.length > 0) {
-          own.forEach(a => combined.push({ ...a, task }));
-        } else {
-          combined.push({
-            id: `unassigned-${task.id}`,
-            task_id: task.id,
-            task,
-            status: 'unassigned',
-            assigned_to: null,
-            assigned_by: null,
-            assigned_at: '', // UI-only placeholder row: never assigned
-            due_datetime: null,
-          });
-        }
-      });
-
-      // Sort by due date (unassigned tasks go to the end)
-      combined.sort((a, b) => {
-        if (!a.due_datetime && !b.due_datetime) return 0;
-        if (!a.due_datetime) return 1;
-        if (!b.due_datetime) return -1;
-        return new Date(a.due_datetime).getTime() - new Date(b.due_datetime).getTime();
-      });
-
-      setRows(combined);
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-      setError('Failed to load tasks. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTasks();
-  }, [user, currentHousehold]);
-
-  const handleTaskUpdate = () => {
-    fetchTasks();
-  };
+  // Imperative mutations (claim, complete, archive) still ask for a reload; the add/edit
+  // action revalidates on its own.
+  const loading = revalidator.state === 'loading';
+  const handleTaskUpdate = () => revalidator.revalidate();
 
   const statusCounts = { unassigned: 0, pending: 0, in_progress: 0, completed: 0, overdue: 0, skipped: 0 };
   tasks.forEach(t => { statusCounts[deriveStatus(t)]++; });
-
-  if (error) {
-    return (
-      <div className="p-4 md:p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <CheckSquare className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
-                Error loading tasks
-              </h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{error}</p>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={fetchTasks}
-                  className="bg-red-100 px-4 py-2 rounded-md text-sm font-medium text-red-800 hover:bg-red-200 transition-colors"
-                >
-                  Try again
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -297,10 +352,9 @@ const TaskManagement: React.FC = () => {
 
       {/* Add Task Modal */}
       <AdminGuard>
-        <AddTaskModal 
+        <AddTaskModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
-          onTaskCreated={handleTaskUpdate}
         />
       </AdminGuard>
     </div>

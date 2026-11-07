@@ -93,8 +93,11 @@ test.describe("PDF Receipt Upload and Parsing", () => {
       await budgetLink.first().click();
       await page.waitForLoadState("networkidle");
     } else {
-      // Try direct navigation
-      await page.goto(`${BASE_URL}/budget`);
+      // Budget lives under /h/<householdId>/budget, so land on / and let the
+      // root loader resolve the household before swapping the last segment.
+      await page.goto(`${BASE_URL}/`);
+      await page.waitForURL(/\/h\/[^/]+\/dashboard/);
+      await page.goto(page.url().replace(/\/dashboard(\?.*)?$/, "/budget"));
       await page.waitForLoadState("networkidle");
     }
 

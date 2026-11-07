@@ -1,24 +1,32 @@
 import React, { useState } from 'react';
+import { useLoaderData, useRevalidator, type LoaderFunctionArgs } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Wallet, FileText, Pencil, Trash2, CheckCircle, ClipboardCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import { useHousehold } from '../../hooks/useHousehold';
-import { usePurchases } from './hooks/usePurchases';
+import { requireUser } from '../../lib/api/session';
 import PurchaseEditorModal from './PurchaseEditorModal';
 import BudgetOverview from './BudgetOverview';
 import {
   PurchaseWithItems,
   deletePurchase,
+  getPurchases,
   getReceiptSignedUrl,
   formatCzk,
 } from '../../lib/api/purchases';
 
+export async function loader({ params }: LoaderFunctionArgs) {
+  await requireUser();
+  return { purchases: await getPurchases(params.householdId!) };
+}
+
 const Budget: React.FC = () => {
   const { user } = useAuth();
   const { members } = useHousehold();
-  const { purchases, loading, refetch } = usePurchases();
+  const { purchases } = useLoaderData() as { purchases: PurchaseWithItems[] };
+  const { revalidate } = useRevalidator();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<PurchaseWithItems | null>(null);
 
@@ -47,7 +55,7 @@ const Budget: React.FC = () => {
     try {
       await deletePurchase(purchase);
       toast.success('Purchase deleted');
-      refetch();
+      revalidate();
     } catch (error: unknown) {
       console.error('Error deleting purchase:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to delete purchase');
@@ -87,17 +95,6 @@ const Budget: React.FC = () => {
     []
   );
 
-  if (loading) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-40 bg-gray-200 rounded-xl animate-pulse" />
-        {[1, 2, 3].map(i => (
-          <div key={i} className="h-24 bg-gray-200 rounded-2xl animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       {/* Header */}
@@ -120,7 +117,7 @@ const Budget: React.FC = () => {
 
       {/* Overview: balance, week/month stats, past months */}
       {purchases.length > 0 && (
-        <BudgetOverview purchases={purchases} memberName={memberName} onSettled={refetch} />
+        <BudgetOverview purchases={purchases} memberName={memberName} onSettled={revalidate} />
       )}
 
       {/* Empty state */}
@@ -222,7 +219,7 @@ const Budget: React.FC = () => {
       <PurchaseEditorModal
         isOpen={editorOpen}
         onClose={() => setEditorOpen(false)}
-        onSaved={refetch}
+        onSaved={revalidate}
         purchase={editingPurchase}
       />
     </div>

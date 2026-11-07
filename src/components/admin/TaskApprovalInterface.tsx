@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Clock, User, Calendar, MoreVertical, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase, Tables } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
-import { useHousehold } from '../../hooks/useHousehold';
+import { useFetcher } from 'react-router-dom';
+import { Tables } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -31,7 +30,7 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 
-type TaskCompletionWithDetails = Tables<'task_completions'> & {
+export type TaskCompletionWithDetails = Tables<'task_completions'> & {
   assignment: Tables<'task_assignments'> & {
     task: (Tables<'tasks'> & { category?: Pick<Tables<'task_categories'>, 'name'> | null }) | null;
     assigned_user: Tables<'user_profiles'> | null;
@@ -40,201 +39,45 @@ type TaskCompletionWithDetails = Tables<'task_completions'> & {
 };
 
 interface TaskApprovalInterfaceProps {
-  onApprovalUpdate?: () => void;
+  /** From the `/h/:householdId/approvals` route loader. */
+  pendingCompletions: TaskCompletionWithDetails[];
 }
 
-const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({ 
-  onApprovalUpdate 
+const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
+  pendingCompletions,
 }) => {
-  const { user } = useAuth();
-  const { currentHousehold, isAdmin } = useHousehold();
-  const [pendingCompletions, setPendingCompletions] = useState<TaskCompletionWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const fetcher = useFetcher<{ ok: true; status: string } | { ok: false; error: string }>();
   const [approvalNotes, setApprovalNotes] = useState<Record<string, string>>({});
   const [detailModalCompletion, setDetailModalCompletion] = useState<TaskCompletionWithDetails | null>(null);
 
-  const fetchPendingCompletions = async () => {
-    if (!currentHousehold || !isAdmin) return;
-
-    try {
-      setLoading(true);
-
-      // First, get all pending task completions
-      const { data: completions, error } = await supabase
-        .from('task_completions')
-        .select('*')
-        .eq('approval_status', 'pending')
-        .order('completed_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (!completions || completions.length === 0) {
-        setPendingCompletions([]);
-        return;
-      }
-
-      // Get assignment IDs and user IDs
-      const assignmentIds = completions.map(c => c.assignment_id);
-      const userIds = [...new Set(completions.map(c => c.completed_by))];
-
-      // Fetch assignments with tasks
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from('task_assignments')
-        .select(`
-          *,
-          task:tasks(*, category:task_categories(name))
-        `)
-        .in('id', assignmentIds);
-
-      if (assignmentsError) throw assignmentsError;
-
-      // Filter assignments to only include those from current household
-      const householdAssignments = assignments?.filter(a => 
-        a.task?.household_id === currentHousehold.id
-      ) || [];
-
-      if (householdAssignments.length === 0) {
-        setPendingCompletions([]);
-        return;
-      }
-
-      // Get user profiles for completed_by and assigned_to users
-      const allUserIds = [
-        ...userIds,
-        ...householdAssignments.map(a => a.assigned_to)
-      ];
-      const uniqueUserIds = [...new Set(allUserIds)];
-
-      const { data: userProfiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .in('id', uniqueUserIds);
-
-      if (profilesError) throw profilesError;
-
-      // Combine the data
-      const completionsWithDetails: TaskCompletionWithDetails[] = completions
-        .map(completion => {
-          const assignment = householdAssignments.find(a => a.id === completion.assignment_id);
-          if (!assignment) return null;
-
-          return {
-            ...completion,
-            assignment: {
-              ...assignment,
-              assigned_user: userProfiles?.find(p => p.id === assignment.assigned_to) || null
-            },
-            completed_user: userProfiles?.find(p => p.id === completion.completed_by) || null
-          };
-        })
-        .filter(Boolean) as TaskCompletionWithDetails[];
-
-      setPendingCompletions(completionsWithDetails);
-    } catch (error) {
-      console.error('Error fetching pending completions:', error);
-      toast.error('Failed to load pending approvals');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ponytail: one fetcher, not one per row — only one row can be submitted at a
+  // time from a dropdown or the modal, and the in-flight FormData says which.
+  // One fetcher serves every row, so a second submit aborts the first and
+  // discards its result. Lock all the buttons, not just the submitting row.
+  const busy = fetcher.state !== 'idle';
+  const processingId = fetcher.state === 'idle'
+    ? null
+    : String(fetcher.formData?.get('completionId') ?? '');
 
   useEffect(() => {
-    fetchPendingCompletions();
-  }, [currentHousehold, isAdmin]);
+    if (!fetcher.data) return;
+    if (fetcher.data.ok) toast.success(`Task completion ${fetcher.data.status}!`);
+    else toast.error(fetcher.data.error);
+  }, [fetcher.data]);
 
-  const handleApproval = async (
-    completionId: string, 
+  const handleApproval = (
+    completionId: string,
     status: 'approved' | 'rejected',
     notes: string = ''
   ) => {
-    if (!isAdmin || !user || !currentHousehold) return;
-
-    setProcessingId(completionId);
-
-    try {
-      const completion = pendingCompletions.find(c => c.id === completionId);
-      if (!completion) throw new Error('Completion not found');
-
-      // Update the completion status
-      const { error: updateError } = await supabase
-        .from('task_completions')
-        .update({
-          approval_status: status,
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-          approval_notes: notes,
-          points_awarded: status === 'approved' ? (completion.assignment.task?.points || 0) : 0
-        })
-        .eq('id', completionId);
-
-      if (updateError) throw updateError;
-
-      // Update assignment status if approved
-      if (status === 'approved') {
-        const { error: assignmentError } = await supabase
-          .from('task_assignments')
-          .update({ status: 'completed' })
-          .eq('id', completion.assignment_id);
-
-        if (assignmentError) throw assignmentError;
-
-        // Update user points if approved
-        const { data: currentPoints, error: pointsError } = await supabase
-          .from('user_points')
-          .select('*')
-          .eq('user_id', completion.completed_by)
-          .eq('household_id', currentHousehold.id)
-          .single();
-
-        if (pointsError && pointsError.code !== 'PGRST116') throw pointsError;
-
-        if (currentPoints) {
-          const { error: updatePointsError } = await supabase
-            .from('user_points')
-            .update({
-              total_points: currentPoints.total_points + (completion.assignment.task?.points || 0),
-              tasks_completed: currentPoints.tasks_completed + 1,
-              last_activity: new Date().toISOString()
-            })
-            .eq('id', currentPoints.id);
-
-          if (updatePointsError) throw updatePointsError;
-        }
-      }
-
-      toast.success(`Task completion ${status}!`);
-      await fetchPendingCompletions();
-      onApprovalUpdate?.();
-    } catch (error) {
-      console.error('Error processing approval:', error);
-      toast.error(`Failed to ${status === 'approved' ? 'approve' : 'reject'} completion`);
-    } finally {
-      setProcessingId(null);
-    }
+    // The action re-checks admin + household and reads the points off the task
+    // row; React Router revalidates the loader when it resolves.
+    fetcher.submit({ completionId, status, notes }, { method: 'post' });
   };
 
   const handleNotesChange = (completionId: string, notes: string) => {
     setApprovalNotes(prev => ({ ...prev, [completionId]: notes }));
   };
-
-  if (!isAdmin) {
-    return null;
-  }
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm">
-        <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-          <div className="space-y-3">
-            <div className="h-24 bg-gray-200 rounded"></div>
-            <div className="h-24 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const ApprovalDetailModal: React.FC<{ 
     completion: TaskCompletionWithDetails | null; 
@@ -384,7 +227,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
                   handleApproval(completion.id, 'approved', approvalNotes[completion.id] || '');
                   onClose();
                 }}
-                disabled={processingId === completion.id}
+                disabled={busy}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {processingId === completion.id ? (
@@ -401,7 +244,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
                   handleApproval(completion.id, 'rejected', approvalNotes[completion.id] || '');
                   onClose();
                 }}
-                disabled={processingId === completion.id}
+                disabled={busy}
                 variant="destructive"
               >
                 {processingId === completion.id ? (
@@ -427,7 +270,7 @@ const TaskApprovalInterface: React.FC<TaskApprovalInterfaceProps> = ({
           variant="ghost" 
           size="sm"
           className="h-8 w-8 p-0"
-          disabled={processingId === completion.id}
+          disabled={busy}
         >
           <MoreVertical className="h-4 w-4" />
           <span className="sr-only">Approval options</span>
