@@ -1,4 +1,4 @@
-import { DraftItem, DraftPurchase, ShopParser } from '../types';
+import { DraftItem, DraftPurchase, ReceiptFormat } from '../types';
 
 const ITEM_LINE = /^(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?) Kč (\d+(?:\.\d+)?) Kč$/;
 const TOTAL_LINE = /^Celkem (\d+(?:\.\d+)?) Kč/;
@@ -6,7 +6,7 @@ const DATE_LINE = /^(\d{2})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}) Účtenka/;
 // ponytail: trailing weighing letter (M/P/E) and/or tax letter (A/B/C) stripped from name
 const NAME_SUFFIX = /(?:\s+[MPE])?\s+[ABC]$/;
 
-export const albertParser: ShopParser = {
+export const albertPdfFormat: ReceiptFormat = {
   shop: 'Albert',
   detect: (text: string) => text.includes('Albert Česká republika'),
   parse: (text: string): DraftPurchase => {

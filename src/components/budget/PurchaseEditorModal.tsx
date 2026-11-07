@@ -8,6 +8,7 @@ import {
   CheckCircle,
   AlertTriangle,
   FileUp,
+  Camera,
 } from "lucide-react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -21,9 +22,9 @@ import {
   uploadReceipt,
   formatCzk,
 } from "../../lib/api/purchases";
-// pdfjs-dist / tesseract.js stay lazy — extractText dynamic-imports them per file type
-import { extractText } from "../../lib/receipts/extractText";
-import { detectParser } from "../../lib/receipts/parsers";
+// pdfjs-dist / tesseract.js stay lazy — the extractors dynamic-import them per file type
+import { importReceipt } from "../../lib/receipts/importReceipt";
+import { ItemRow, draftToRows, newRow } from "./receiptRows";
 
 interface PurchaseEditorModalProps {
   isOpen: boolean;
@@ -33,26 +34,8 @@ interface PurchaseEditorModalProps {
   taskCompletionId?: string | null; // link new purchase to a Shopping task completion
 }
 
-interface ItemRow {
-  key: number;
-  name: string;
-  quantity: string;
-  total_price: string;
-  owner_id: string | null; // null = shared
-}
-
 // Czech habit: comma decimals
 const parseNum = (value: string): number => parseFloat(value.replace(",", "."));
-
-let nextKey = 0;
-const newRow = (partial: Partial<ItemRow> = {}): ItemRow => ({
-  key: nextKey++,
-  name: "",
-  quantity: "1",
-  total_price: "",
-  owner_id: null,
-  ...partial,
-});
 
 // Shell renders the overlay; the form mounts fresh per open (keyed by purchase),
 // so state initializes from props — no reset effect needed.
@@ -124,51 +107,48 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, "isOpen">> = ({
         )
       : [newRow()],
   );
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
 
-  // Attach + try to import: extract text (PDF text layer / OCR), detect shop,
-  // prefill the form. Any failure falls back to manual entry — never fatal.
-  const handleReceiptFile = async (file: File | null) => {
-    setReceiptFile(file);
-    if (!file || parsing) return;
+  // Attach + import. Several files are pages of ONE receipt. Every failure
+  // falls back to manual entry — never fatal.
+  const handleReceiptFiles = async (files: File[]) => {
+    if (files.length === 0 || parsing) return;
+    setReceiptFiles(files);
     setParsing(true);
     try {
-      const text = await extractText(file, file.name);
-      console.log("[Receipt] Extracted text length:", text.length);
-      console.log("[Receipt] First 200 chars:", text.substring(0, 200));
-
-      const parser = detectParser(text);
-      if (!parser) {
-        console.warn(
-          "[Receipt] No parser detected for text:",
-          text.substring(0, 500),
-        );
-        toast("Shop not recognized — fill in items manually", { icon: "🧾" });
-        return;
-      }
-
-      console.log("[Receipt] Using parser:", parser.shop);
-      const draft = parser.parse(text);
-      console.log("[Receipt] Parsed:", draft);
-
-      setShopName(draft.shop);
-      setDate(format(draft.purchasedAt, "yyyy-MM-dd"));
-      setTotal(draft.total.toFixed(2));
-      setRows(
-        draft.items.map((item) =>
-          newRow({
-            name: item.name,
-            quantity: String(item.quantity),
-            total_price: item.totalPrice.toFixed(2),
-          }),
-        ),
+      const outcome = await importReceipt(
+        files.map((file) => ({ name: file.name, type: file.type, data: file })),
       );
-      toast.success(`Imported ${draft.items.length} items from ${draft.shop}`);
+      switch (outcome.status) {
+        case "parsed":
+        case "guessed": {
+          const { draft } = outcome;
+          // the generic scraper reports no shop; don't clear what the user typed
+          if (draft.shop) setShopName(draft.shop);
+          if (!isNaN(draft.purchasedAt.getTime()))
+            setDate(format(draft.purchasedAt, "yyyy-MM-dd"));
+          setTotal(draft.total.toFixed(2));
+          setRows(draftToRows(draft));
+          if (outcome.status === "parsed")
+            toast.success(
+              `Imported ${draft.items.length} items from ${draft.shop}`,
+            );
+          else
+            toast(
+              `Guessed ${draft.items.length} items — check them and add the shop`,
+              { icon: "🧾" },
+            );
+          break;
+        }
+        case "illegible":
+        case "unsupported":
+          toast.error(outcome.hint, { duration: 6000 });
+          break;
+      }
     } catch (error) {
       console.error("[Receipt] Import failed:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      toast.error(`Receipt import failed: ${message}`, { duration: 5000 });
+      toast.error("Receipt import failed");
     } finally {
       setParsing(false);
     }
@@ -280,9 +260,11 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, "isOpen">> = ({
         purchaseId = await createPurchase(input, items);
       }
 
-      if (receiptFile) {
+      // ponytail: purchases.receipt_url holds one path, so only page 1 is
+      // archived; add a receipt_urls array column to keep every page.
+      if (receiptFiles.length > 0) {
         try {
-          await uploadReceipt(currentHousehold.id, purchaseId, receiptFile);
+          await uploadReceipt(currentHousehold.id, purchaseId, receiptFiles[0]);
         } catch (uploadError) {
           console.error("Receipt upload failed:", uploadError);
           toast.error("Purchase saved, but receipt upload failed");
@@ -350,40 +332,67 @@ const PurchaseForm: React.FC<Omit<PurchaseEditorModalProps, "isOpen">> = ({
         <div className="space-y-6">
           {/* Receipt import — the fast path; manual entry below is the alternative */}
           <div>
-            <label
+            <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
-                handleReceiptFile(e.dataTransfer.files?.[0] || null);
+                handleReceiptFiles(Array.from(e.dataTransfer.files ?? []));
               }}
-              className="flex flex-col items-center gap-1 px-4 py-5 border-2 border-dashed border-teal-300 bg-teal-50/50 rounded-xl cursor-pointer hover:border-teal-400 transition-colors text-center"
+              className="px-4 py-4 border-2 border-dashed border-teal-300 bg-teal-50/50 rounded-xl text-center"
             >
               {parsing ? (
-                <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                <div className="flex flex-col items-center gap-1 py-2">
+                  <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Reading receipt…
+                  </span>
+                </div>
               ) : (
-                <FileUp className="w-6 h-6 text-teal-500" />
+                <>
+                  {/* Two targets: `capture` and `multiple` conflict, so the
+                      camera is its own button and multi-page goes through the
+                      picker. `accept` deliberately omits HEIC/HEIF — listing
+                      them stops iOS transcoding the photo to JPEG for us. */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-teal-300 rounded-xl cursor-pointer hover:border-teal-400 transition-colors text-sm font-medium text-gray-700">
+                      <Camera className="w-5 h-5 text-teal-500" />
+                      Take photo
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        capture="environment"
+                        onChange={(e) =>
+                          handleReceiptFiles(Array.from(e.target.files ?? []))
+                        }
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-teal-300 rounded-xl cursor-pointer hover:border-teal-400 transition-colors text-sm font-medium text-gray-700">
+                      <FileUp className="w-5 h-5 text-teal-500" />
+                      Choose file
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                        onChange={(e) =>
+                          handleReceiptFiles(Array.from(e.target.files ?? []))
+                        }
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  <span className="block mt-2 text-xs text-gray-500">
+                    {receiptFiles.length === 1
+                      ? receiptFiles[0].name
+                      : receiptFiles.length > 1
+                        ? `${receiptFiles.length} pages attached`
+                        : purchase?.receipt_url
+                          ? "Replace attached receipt…"
+                          : "Items are filled in automatically for review"}
+                  </span>
+                </>
               )}
-              <span className="text-sm font-medium text-gray-700">
-                {parsing
-                  ? "Reading receipt…"
-                  : receiptFile
-                    ? receiptFile.name
-                    : purchase?.receipt_url
-                      ? "Replace attached receipt…"
-                      : "Upload receipt (PDF/PNG/JPG)"}
-              </span>
-              {!parsing && !receiptFile && (
-                <span className="text-xs text-gray-500">
-                  Items are filled in automatically for review
-                </span>
-              )}
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                onChange={(e) => handleReceiptFile(e.target.files?.[0] || null)}
-                className="hidden"
-              />
-            </label>
+            </div>
             <div className="flex items-center gap-3 mt-4 text-xs font-medium text-gray-400 uppercase tracking-wide">
               <div className="flex-1 h-px bg-gray-200" />
               or enter manually

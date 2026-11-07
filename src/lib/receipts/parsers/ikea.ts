@@ -1,4 +1,4 @@
-import { DraftItem, DraftPurchase, ShopParser } from '../types';
+import { DraftItem, DraftPurchase, ReceiptFormat } from '../types';
 
 // Each item is a `Položka <art.no.> [<dept>]` header followed by a name line:
 //   `SOJABÖNA kvetinac 9 29,00 0`  — name, price, optional VAT code
@@ -11,7 +11,7 @@ const DATE_LINE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):\d{2}$/;
 
 const num = (s: string): number => parseFloat(s.replace(',', '.'));
 
-export const ikeaParser: ShopParser = {
+export const ikeaParser: ReceiptFormat = {
   shop: 'IKEA',
   detect: (text: string) => text.includes('IKEA Česká republika'),
   parse: (text: string): DraftPurchase => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { albertParser } from '../lib/receipts/parsers/albert';
+import { albertPdfFormat } from '../lib/receipts/parsers/albertPdf';
 
 // Real Albert receipt with personal data scrubbed (phone, card, SEQ/Autoriz,
 // ID účtu, terminal, barcode replaced with fake values).
@@ -47,17 +47,17 @@ Legenda způsobu vážení položek:
 “M” - Ruční zadání, “P” - Váženo na pokladně, “E” - Váženo etiketovací váhou
 000000000000000000000000000000000000`;
 
-describe('albertParser', () => {
+describe('albertPdfFormat', () => {
   it('detects Albert receipts', () => {
-    expect(albertParser.detect(fixture)).toBe(true);
+    expect(albertPdfFormat.detect(fixture)).toBe(true);
   });
 
   it('does not detect non-Albert receipts', () => {
-    expect(albertParser.detect('Kaufland v.o.s.\nSoučet 123.00\nLidl K PLATBĚ')).toBe(false);
+    expect(albertPdfFormat.detect('Kaufland v.o.s.\nSoučet 123.00\nLidl K PLATBĚ')).toBe(false);
   });
 
   it('parses the receipt', () => {
-    const p = albertParser.parse(fixture);
+    const p = albertPdfFormat.parse(fixture);
     expect(p.shop).toBe('Albert');
     expect(p.purchasedAt).toEqual(new Date(2026, 7, 14, 11, 10));
     expect(p.total).toBe(219.5);

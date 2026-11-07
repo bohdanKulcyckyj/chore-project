@@ -1,4 +1,5 @@
-import { DraftItem, DraftPurchase, ShopParser } from '../types';
+import { DraftItem, DraftPurchase, ReceiptFormat } from '../types';
+import { TOL, num, variants } from '../ocr';
 
 // Item line: `Name 68,70 B` — keep-2-decimals drops glued OCR digits (`68,709 B`).
 const ITEM_LINE = /^(.+?)\s+(\d+,\d{2})\d*\s+[ABC]$/;
@@ -10,23 +11,7 @@ const TOTAL_LINE = /^K PLATBĚ\s+((?:\d\s?)*\d,\d{2})/;
 const DATE_LINE = /(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+Účtenka/;
 const DATE_FALLBACK = /(\d{2})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/;
 
-const TOL = 0.015;
-
-const num = (s: string): number => parseFloat(s.replace(/\s/g, '').replace(',', '.'));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
-
-// OCR glues stray digits into prices (`29,990` = 29,90; `709,84` = 70,84).
-// Candidates = the value as-is plus every single-digit deletion.
-function variants(s: string): number[] {
-  const out = [num(s)];
-  for (let i = 0; i < s.length; i++) {
-    if (/\d/.test(s[i])) {
-      const v = num(s.slice(0, i) + s.slice(i + 1));
-      if (Number.isFinite(v)) out.push(v);
-    }
-  }
-  return out;
-}
 
 // Qty line sets quantity/unitPrice of the previous item; pick the first
 // total/unit candidate pair where qty * unit ≈ total.
@@ -50,7 +35,7 @@ function reconcile(item: DraftItem, qty: number, unitRaw: string, totalRaw: stri
   // ponytail: irreconcilable OCR — keep the item-line total, drop unitPrice
 }
 
-export const lidlParser: ShopParser = {
+export const lidlParser: ReceiptFormat = {
   shop: 'Lidl',
   detect: (text: string) => text.includes('Lidl'),
   parse: (text: string): DraftPurchase => {

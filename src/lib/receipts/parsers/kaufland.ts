@@ -1,4 +1,4 @@
-import { DraftItem, DraftPurchase, ShopParser } from '../types';
+import { DraftItem, DraftPurchase, ReceiptFormat } from '../types';
 
 // `4 * 29,90 119,60 C` or `2,177 kg * 249,90 544,03 F` (name is on the previous line)
 const QTY_LINE = /^(\d+(?:,\d+)?)\s*(?:kg\s*)?\*\s*(-?\d+(?:,\d+)?)\s+(-?\d+(?:,\d+)?)\s+[A-Z]$/;
@@ -9,7 +9,7 @@ const DATE_LINE = /^Datum:\s*(\d{2})\.(\d{2})\.(\d{2})\s+Čas:\s*(\d{2}):(\d{2})
 
 const num = (s: string): number => parseFloat(s.replace(',', '.'));
 
-export const kauflandParser: ShopParser = {
+export const kauflandParser: ReceiptFormat = {
   shop: 'Kaufland',
   detect: (text: string) => text.includes('Kaufland'),
   parse: (text: string): DraftPurchase => {
